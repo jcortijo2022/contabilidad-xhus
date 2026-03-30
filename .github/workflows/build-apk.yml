@@ -33,34 +33,49 @@ jobs:
           mkdir apk-build && cd apk-build
           python3 << 'PYEOF'
           import pexpect, sys
-          child = pexpect.spawn('bubblewrap init --manifest https://contabilidad-xhus.vercel.app/manifest.json --directory . --skipPwaValidation', timeout=120, encoding='utf-8')
+          child = pexpect.spawn('bubblewrap init --manifest https://contabilidad-xhus.vercel.app/manifest.json --directory . --skipPwaValidation', timeout=180, encoding='utf-8')
           child.logfile = sys.stdout
-          responses = {
-            'install the JDK': 'n',
-            'Domain:': '',
-            'URL path:': '',
-            'Application name:': '',
-            'short name:': '',
-            'version name:': '',
-            'version code:': '',
-            'Display mode:': '',
-            'Orientation:': '',
-            'color': '',
-            'Splash': '',
-            'icon URL': '',
-            'maskable': '',
-            'monochrome': '',
-            'include': '',
-            'Play': '',
-          }
+          patterns = [
+            ('install the JDK', 'n'),
+            ('Domain:', ''),
+            ('URL path:', ''),
+            ('Application name:', ''),
+            ('short name:', ''),
+            ('version name:', ''),
+            ('version code:', ''),
+            ('Display mode:', ''),
+            ('Orientation:', ''),
+            ('Status bar color:', ''),
+            ('Splash screen color:', ''),
+            ('Icon URL:', ''),
+            ('Maskable icon URL:', ''),
+            ('Monochrome icon URL:', ''),
+            ('Play Billing', 'n'),
+            ('geolocation', 'n'),
+            ('Key store location:', ''),
+            ('Key name:', ''),
+            ('create one now', 'y'),
+            ('first and last name', 'Xhus App'),
+            ('organizational unit', 'Dev'),
+            ('organization', 'Xhus'),
+            ('City or Locality', 'Valencia'),
+            ('State or Province', 'Valencia'),
+            ('country code', 'ES'),
+            ('password', 'android123'),
+            ('password for', 'android123'),
+            ('Re-enter', 'android123'),
+            ('correct', 'yes'),
+          ]
           while True:
             try:
-              idx = child.expect(list(responses.keys()) + [pexpect.EOF])
-              if idx >= len(responses):
+              keys = [p[0] for p in patterns]
+              idx = child.expect(keys + [pexpect.EOF], timeout=60)
+              if idx >= len(patterns):
                 break
-              key = list(responses.keys())[idx]
-              child.sendline(responses[key])
+              child.sendline(patterns[idx][1])
             except pexpect.EOF:
+              break
+            except pexpect.TIMEOUT:
               break
           child.wait()
           PYEOF
