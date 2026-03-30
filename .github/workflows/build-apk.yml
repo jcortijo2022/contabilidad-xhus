@@ -21,17 +21,38 @@ jobs:
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
 
-      - name: Install Bubblewrap and configure
+      - name: Install tools
         run: |
           npm install -g @bubblewrap/cli
+          sudo apt-get install -y expect
           mkdir -p ~/.bubblewrap
           echo '{"jdkPath":"'$JAVA_HOME'","androidSdkPath":"'$ANDROID_SDK_ROOT'"}' > ~/.bubblewrap/config.json
-          cat ~/.bubblewrap/config.json
 
-      - name: Init TWA
+      - name: Init TWA with expect
         run: |
           mkdir apk-build && cd apk-build
-          printf "n\n" | bubblewrap init --manifest https://contabilidad-xhus.vercel.app/manifest.json --directory . --skipPwaValidation
+          expect << 'EXPECT'
+          set timeout 120
+          spawn bubblewrap init --manifest https://contabilidad-xhus.vercel.app/manifest.json --directory . --skipPwaValidation
+          expect "Do you want Bubblewrap to install the JDK" { send "n\r" }
+          expect "Domain:" { send "\r" }
+          expect "URL path:" { send "\r" }
+          expect "Application name:" { send "\r" }
+          expect "short name:" { send "\r" }
+          expect "Application version:" { send "\r" }
+          expect "version code:" { send "\r" }
+          expect "Display mode:" { send "\r" }
+          expect "Orientation:" { send "\r" }
+          expect "color:" { send "\r" }
+          expect "color:" { send "\r" }
+          expect "Splash screen" { send "\r" }
+          expect "icon URL" { send "\r" }
+          expect "maskable icon" { send "\r" }
+          expect "monochrome icon" { send "\r" }
+          expect "include your app" { send "\r" }
+          expect "Play Store" { send "\r" }
+          expect eof
+          EXPECT
 
       - name: Build APK
         run: |
