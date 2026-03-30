@@ -21,24 +21,25 @@ jobs:
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
 
-      - name: Clone modern TWA template
-        run: git clone https://github.com/chromeos/pwa-in-play-store.git twa-app
-
-      - name: Configure TWA
+      - name: Install Bubblewrap and configure
         run: |
-          cd twa-app
-          sed -i 's/hostName = .*/hostName = "contabilidad-xhus.vercel.app"/' app/build.gradle
-          sed -i 's/defaultUrl = .*/defaultUrl = "\/"/' app/build.gradle
-          sed -i 's/applicationId = .*/applicationId = "com.xhus.contabilidad"/' app/build.gradle
+          npm install -g @bubblewrap/cli
+          mkdir -p ~/.bubblewrap
+          echo '{"jdkPath":"'$JAVA_HOME'","androidSdkPath":"'$ANDROID_SDK_ROOT'"}' > ~/.bubblewrap/config.json
+          cat ~/.bubblewrap/config.json
+
+      - name: Init TWA
+        run: |
+          mkdir apk-build && cd apk-build
+          printf "n\n" | bubblewrap init --manifest https://contabilidad-xhus.vercel.app/manifest.json --directory . --skipPwaValidation
 
       - name: Build APK
         run: |
-          cd twa-app
-          chmod +x gradlew
-          ./gradlew assembleDebug
+          cd apk-build
+          bubblewrap build --skipPwaValidation
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: contabilidad-xhus-apk
-          path: twa-app/app/build/outputs/apk/debug/app-debug.apk
+          path: apk-build/app-release-unsigned.apk
