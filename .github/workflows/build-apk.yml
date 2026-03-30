@@ -111,4 +111,4 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: contabilidad-xhus-apk
-          path: apk-build/app-release-unsigned.apk
+          path: apk-build/app-release-signed.apk
