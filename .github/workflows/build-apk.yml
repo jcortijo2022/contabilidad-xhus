@@ -18,22 +18,21 @@ jobs:
           distribution: temurin
           java-version: 17
 
-      - name: Setup Node
-        uses: actions/setup-node@v4
-        with:
-          node-version: 20
-
-      - name: Install Bubblewrap
-        run: npm install -g @bubblewrap/cli
-
-      - name: Setup Android SDK
+      - name: Install Bubblewrap and pre-configure
         run: |
-          echo "y" | bubblewrap updateConfig --jdkPath $JAVA_HOME --androidSdkPath $ANDROID_SDK_ROOT
+          npm install -g @bubblewrap/cli
+          mkdir -p ~/.bubblewrap
+          cat > ~/.bubblewrap/config.json << 'BEOF'
+          {
+            "jdkPath": "/opt/hostedtoolcache/Java_Temurin_jdk/17.0.14-7/x64",
+            "androidSdkPath": "/usr/local/lib/android/sdk"
+          }
+          BEOF
 
-      - name: Build TWA
+      - name: Init and Build TWA
         run: |
           mkdir apk-build && cd apk-build
-          echo "n" | bubblewrap init --manifest https://contabilidad-xhus.vercel.app/manifest.json --directory . --skipPwaValidation
+          bubblewrap init --manifest https://contabilidad-xhus.vercel.app/manifest.json --directory . --skipPwaValidation --yes
           bubblewrap build --skipPwaValidation
 
       - name: Upload APK
