@@ -27,12 +27,25 @@ jobs:
           mkdir -p ~/.bubblewrap
           echo '{"jdkPath":"'$JAVA_HOME'","androidSdkPath":"'$ANDROID_SDK_ROOT'"}' > ~/.bubblewrap/config.json
 
-      - name: Init TWA with Python pexpect
+      - name: Create keystore
+        run: |
+          mkdir -p apk-build
+          keytool -genkey -v \
+            -keystore apk-build/android.keystore \
+            -alias android \
+            -keyalg RSA \
+            -keysize 2048 \
+            -validity 10000 \
+            -storepass android123 \
+            -keypass android123 \
+            -dname "CN=Xhus App, OU=Dev, O=Xhus, L=Valencia, ST=Valencia, C=ES"
+
+      - name: Init TWA with pexpect
         run: |
           pip install pexpect
-          mkdir apk-build && cd apk-build
+          cd apk-build
           python3 << 'PYEOF'
-          import pexpect, sys
+          import pexpect, sys, time
           child = pexpect.spawn('bubblewrap init --manifest https://contabilidad-xhus.vercel.app/manifest.json --directory . --skipPwaValidation', timeout=180, encoding='utf-8')
           child.logfile = sys.stdout
           patterns = [
@@ -54,17 +67,7 @@ jobs:
             ('geolocation', 'n'),
             ('Key store location:', ''),
             ('Key name:', ''),
-            ('create one now', 'y'),
-            ('first and last name', 'Xhus App'),
-            ('organizational unit', 'Dev'),
-            ('organization', 'Xhus'),
-            ('City or Locality', 'Valencia'),
-            ('State or Province', 'Valencia'),
-            ('country code', 'ES'),
-            ('password', 'android123'),
-            ('password for', 'android123'),
-            ('Re-enter', 'android123'),
-            ('correct', 'yes'),
+            ('create one now', 'n'),
           ]
           while True:
             try:
@@ -72,10 +75,9 @@ jobs:
               idx = child.expect(keys + [pexpect.EOF], timeout=60)
               if idx >= len(patterns):
                 break
+              time.sleep(0.5)
               child.sendline(patterns[idx][1])
-            except pexpect.EOF:
-              break
-            except pexpect.TIMEOUT:
+            except (pexpect.EOF, pexpect.TIMEOUT):
               break
           child.wait()
           PYEOF
