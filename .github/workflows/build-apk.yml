@@ -12,18 +12,29 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Setup Java 11
+      - name: Setup Java 17
         uses: actions/setup-java@v4
         with:
           distribution: temurin
-          java-version: 11
+          java-version: 17
 
-      - name: Clone TWA Quickstart
-        run: git clone https://github.com/GoogleChromeLabs/svgomg-twa.git twa-app
+      - name: Setup Android SDK
+        uses: android-actions/setup-android@v3
+
+      - name: Clone modern TWA template
+        run: git clone https://github.com/chromeos/pwa-in-play-store.git twa-app
+
+      - name: Configure TWA
+        run: |
+          cd twa-app
+          sed -i 's/hostName = .*/hostName = "contabilidad-xhus.vercel.app"/' app/build.gradle
+          sed -i 's/defaultUrl = .*/defaultUrl = "\/"/' app/build.gradle
+          sed -i 's/applicationId = .*/applicationId = "com.xhus.contabilidad"/' app/build.gradle
 
       - name: Build APK
         run: |
           cd twa-app
+          chmod +x gradlew
           ./gradlew assembleDebug
 
       - name: Upload APK
