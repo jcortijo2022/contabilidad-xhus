@@ -12,20 +12,38 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Setup Node
-        uses: actions/setup-node@v4
-        with:
-          node-version: 20
-
-      - name: Install PWABuilder CLI
-        run: npm install -g @pwabuilder/pwabuilder
-
-      - name: Build Android Package
+      - name: Generate APK via PWABuilder API
         run: |
-          pwabuilder package -p android -u https://contabilidad-xhus.vercel.app -d ./output
+          curl -X POST https://pwabuilder-apk-service.azurewebsites.net/generateApkZip \
+            -H "Content-Type: application/json" \
+            -d '{
+              "packageId": "com.xhus.contabilidad",
+              "name": "Contabilidad Xhus",
+              "launcherName": "Xhus",
+              "appVersion": "1.0.0",
+              "appVersionCode": 1,
+              "host": "contabilidad-xhus.vercel.app",
+              "startUrl": "/",
+              "themeColor": "#818cf8",
+              "navigationColor": "#818cf8",
+              "backgroundColor": "#0a0c14",
+              "iconUrl": "https://contabilidad-xhus.vercel.app/icon-512.png",
+              "maskableIconUrl": "https://contabilidad-xhus.vercel.app/icon-512.png",
+              "monochromeIconUrl": "https://contabilidad-xhus.vercel.app/icon-512.png",
+              "signingMode": "none",
+              "display": "standalone",
+              "orientation": "default",
+              "enableNotifications": false,
+              "enableSiteSettingsShortcut": true,
+              "isChromeOSOnly": false,
+              "isMetaQuest": false,
+              "fallbackType": "customtabs",
+              "webManifestUrl": "https://contabilidad-xhus.vercel.app/manifest.json"
+            }' \
+            --output apk.zip --location
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: contabilidad-xhus-apk
-          path: ./output/
+          path: apk.zip
