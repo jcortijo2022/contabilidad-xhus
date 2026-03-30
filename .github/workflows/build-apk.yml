@@ -12,31 +12,20 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Setup Java
-        uses: actions/setup-java@v4
+      - name: Setup Node
+        uses: actions/setup-node@v4
         with:
-          distribution: temurin
-          java-version: 17
+          node-version: 20
 
-      - name: Install Bubblewrap and pre-configure
-        run: |
-          npm install -g @bubblewrap/cli
-          mkdir -p ~/.bubblewrap
-          cat > ~/.bubblewrap/config.json << 'BEOF'
-          {
-            "jdkPath": "/opt/hostedtoolcache/Java_Temurin_jdk/17.0.14-7/x64",
-            "androidSdkPath": "/usr/local/lib/android/sdk"
-          }
-          BEOF
+      - name: Install PWABuilder CLI
+        run: npm install -g @pwabuilder/pwabuilder
 
-      - name: Init and Build TWA
+      - name: Build Android Package
         run: |
-          mkdir apk-build && cd apk-build
-          bubblewrap init --manifest https://contabilidad-xhus.vercel.app/manifest.json --directory . --skipPwaValidation --yes
-          bubblewrap build --skipPwaValidation
+          pwabuilder package -p android -u https://contabilidad-xhus.vercel.app -d ./output
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
           name: contabilidad-xhus-apk
-          path: apk-build/app-release-unsigned.apk
+          path: ./output/
