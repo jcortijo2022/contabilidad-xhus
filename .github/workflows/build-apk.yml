@@ -3,19 +3,14 @@ name: Build APK
 on:
   workflow_dispatch:
 
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
 jobs:
   build:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-
-      - name: Setup Node
-        uses: actions/setup-node@v4
-        with:
-          node-version: 18
-
-      - name: Install Bubblewrap
-        run: npm install -g @bubblewrap/cli
 
       - name: Setup Java
         uses: actions/setup-java@v4
@@ -23,15 +18,18 @@ jobs:
           distribution: temurin
           java-version: 17
 
-      - name: Init TWA
-        run: |
-          mkdir apk-build
-          cd apk-build
-          bubblewrap init --manifest https://contabilidad-xhus.vercel.app/manifest.json --directory .
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
 
-      - name: Build APK
+      - name: Install Bubblewrap
+        run: npm install -g @bubblewrap/cli
+
+      - name: Build TWA
         run: |
-          cd apk-build
+          mkdir apk-build && cd apk-build
+          bubblewrap init --manifest https://contabilidad-xhus.vercel.app/manifest.json --directory . --skipPwaValidation
           bubblewrap build --skipPwaValidation
 
       - name: Upload APK
