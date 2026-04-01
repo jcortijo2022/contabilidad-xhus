@@ -266,6 +266,7 @@ export default function App() {
   const [editStock, setEditStock] = useState(null);
   const [editDebt, setEditDebt] = useState(null);
   const [editProp, setEditProp] = useState(null);
+  const [budgetDetail, setBudgetDetail] = useState(null);
   const [modal, setModal] = useState(null);
   const [deleteId, setDeleteId] = useState(null);
   const [toast, setToast] = useState(null);
@@ -453,7 +454,7 @@ export default function App() {
     return map;
   },[transactions]);
 
-  const budgetsWithSpent = useMemo(()=>budgets.map(b=>{const spent=transactions.filter(t=>t.type==="gasto"&&t.category===b.category&&t.date>=startOfSelMonth&&t.date<=endOfSelMonth).reduce((s,t)=>s+t.amount,0); return {...b,spent};}),[ budgets,transactions,selectedMonth]);
+  const budgetsWithSpent = useMemo(()=>{const todayStr=today(); return budgets.map(b=>{const spent=transactions.filter(t=>t.type==="gasto"&&t.category===b.category&&t.date>=startOfSelMonth&&t.date<=endOfSelMonth&&t.date<=todayStr).reduce((s,t)=>s+t.amount,0); return {...b,spent};});},[budgets,transactions,selectedMonth]);
 
   const depositAlerts = useMemo(()=>{
     const alerts=[];
@@ -1269,15 +1270,15 @@ export default function App() {
               </div>
             </div>
 
-            {/* Period selector */}
-            <div style={{display:"flex",gap:8,marginBottom:12,flexWrap:"wrap",alignItems:"center"}}>
-              {[["7d","7 días"],["30d","30 días"],["90d","90 días"],["all","Todo"],["upcoming","Próximos"]].map(([v,l])=>(
-                <button key={v} style={{...S.tab,...(filterPeriod===v?S.tabActive:{}),borderRadius:8,border:"1px solid #e2e8f0",padding:"7px 14px"}} onClick={()=>{setFilterPeriod(v);setDateFrom("");setDateTo("");setShowMonthPicker(false);}}>
+            {/* Period + type filters */}
+            <div style={{display:"flex",gap:6,marginBottom:8,flexWrap:"wrap",alignItems:"center"}}>
+              {[["30d","30d"],["90d","90d"],["all","Todo"],["upcoming","Próx."]].map(([v,l])=>(
+                <button key={v} style={{...S.tab,...(filterPeriod===v?S.tabActive:{}),borderRadius:8,border:"1px solid #e2e8f0",padding:"6px 10px",fontSize:12}} onClick={()=>{setFilterPeriod(v);setDateFrom("");setDateTo("");setShowMonthPicker(false);}}>
                   {l}
                 </button>
               ))}
               <div style={{position:"relative"}}>
-                <button style={{...S.tab,...(filterPeriod==="month"?S.tabActive:{}),borderRadius:8,border:"1px solid #e2e8f0",padding:"7px 14px"}} onClick={()=>{setFilterPeriod("month");setShowMonthPicker(p=>!p);setDateFrom("");setDateTo("");}}>
+                <button style={{...S.tab,...(filterPeriod==="month"?S.tabActive:{}),borderRadius:8,border:"1px solid #e2e8f0",padding:"6px 10px",fontSize:12}} onClick={()=>{setFilterPeriod("month");setShowMonthPicker(p=>!p);setDateFrom("");setDateTo("");}}>
                   {filterPeriod==="month"?capFirst(new Date(filterMonthYear+"-01T00:00:00").toLocaleDateString("es-ES",{month:"short",year:"numeric"})):"Mes"}
                 </button>
                 {showMonthPicker&&filterPeriod==="month"&&(
@@ -1287,29 +1288,29 @@ export default function App() {
                       {["Ene","Feb","Mar","Abr","May","Jun","Jul","Ago","Sep","Oct","Nov","Dic"].map((m,i)=>{
                         const year=new Date().getFullYear();
                         const val=`${year}-${String(i+1).padStart(2,"0")}`;
-                        return <button key={m} style={{padding:"6px",borderRadius:6,border:"1px solid #e2e8f0",background:filterMonthYear===val?"#eef2ff":"#f8fafc",color:filterMonthYear===val?"#4f46e5":"#64748b",cursor:"pointer",fontSize:13}} onClick={()=>{setFilterMonthYear(val);setShowMonthPicker(false);}}>{m}</button>;
+                        return <button key={m} style={{padding:"6px",borderRadius:6,border:"1px solid #e2e8f0",background:filterMonthYear===val?"#eef2ff":"#f8fafc",color:filterMonthYear===val?"#4f46e5":"#64748b",cursor:"pointer",fontSize:12}} onClick={()=>{setFilterMonthYear(val);setShowMonthPicker(false);}}>{m}</button>;
                       })}
                     </div>
                   </div>
                 )}
               </div>
-            </div>
-
-            <div style={{display:"flex",gap:10,marginBottom:10,flexWrap:"wrap",alignItems:"center"}}>
-              <input style={{...S.search,flex:1,minWidth:160}} placeholder="Buscar…" value={search} onChange={e=>setSearch(e.target.value)}/>
-              <div style={S.tabs}>
-                {[["all","Todos"],["ingreso","Ingresos"],["gasto","Gastos"]].map(([v,l])=>(
+              <div style={{...S.tabs,marginLeft:"auto"}}>
+                {[["all","Todos"],["ingreso","↑"],["gasto","↓"]].map(([v,l])=>(
                   <button key={v} style={{...S.tab,...(filter===v?S.tabActive:{})}} onClick={()=>setFilter(v)}>{l}</button>
                 ))}
               </div>
+            </div>
+            {/* Search + account + category */}
+            <div style={{display:"flex",gap:8,marginBottom:12,flexWrap:"wrap",alignItems:"center"}}>
+              <input style={{...S.search,flex:1,minWidth:120}} placeholder="Buscar…" value={search} onChange={e=>setSearch(e.target.value)}/>
               {!selectedAccountId&&(
-                <select style={{...S.input,width:"auto",padding:"8px 12px"}} value={filterAcc} onChange={e=>setFilterAcc(e.target.value)}>
+                <select style={{...S.input,flex:1,minWidth:100,padding:"7px 8px",fontSize:12}} value={filterAcc} onChange={e=>setFilterAcc(e.target.value)}>
                   <option value="all">Todas las cuentas</option>
                   {accounts.map(a=><option key={a.id} value={a.id}>{a.name}</option>)}
                 </select>
               )}
-              <select style={{...S.input,width:"auto",padding:"8px 12px"}} value={filterCat} onChange={e=>setFilterCat(e.target.value)}>
-                <option value="">Todas las categorías</option>
+              <select style={{...S.input,flex:1,minWidth:100,padding:"7px 8px",fontSize:12}} value={filterCat} onChange={e=>setFilterCat(e.target.value)}>
+                <option value="">Todas categorías</option>
                 {[...new Set([...CATEGORIES.ingreso,...CATEGORIES.gasto])].sort().map(c=><option key={c} value={c}>{c}</option>)}
               </select>
             </div>
@@ -1427,7 +1428,7 @@ export default function App() {
                     <button style={{...S.iconBtn,...S.iconBtnDel}} onClick={deleteMonthlyLimit}>✕</button>
                   </div>
                   {(()=>{
-                    const spent=transactions.filter(t=>t.type==="gasto"&&t.category!=="Traspaso"&&t.date>=startOfSelMonth&&t.date<=endOfSelMonth).reduce((s,t)=>s+t.amount,0);
+                    const todayStr2=today(); const spent=transactions.filter(t=>t.type==="gasto"&&t.category!=="Traspaso"&&t.date>=startOfSelMonth&&t.date<=endOfSelMonth&&t.date<=todayStr2).reduce((s,t)=>s+t.amount,0);
                     const pct=Math.min((spent/monthlyLimit.amount)*100,100);
                     const over=spent>monthlyLimit.amount;
                     const warn=pct>=80&&!over;
@@ -1460,7 +1461,7 @@ export default function App() {
                 const over=b.spent>b.amount, warn=pct>=80&&!over;
                 const barColor=over?"#ef4444":warn?"#f59e0b":"#4f46e5";
                 return (
-                  <div key={b.id} style={{...S.budgetCard,borderTop:`3px solid ${barColor}`}}>
+                  <div key={b.id} style={{...S.budgetCard,borderTop:`3px solid ${barColor}`,cursor:"pointer"}} onClick={()=>setBudgetDetail(budgetDetail===b.category?null:b.category)}>
                     <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:10}}>
                       <div><p style={{margin:0,fontWeight:700,color:"#0f172a",fontSize:15}}>{b.category}</p>{over&&<span style={S.badgeDanger}>⚠ Excedido</span>}{warn&&<span style={S.badgeWarn}>⚡ Cerca</span>}</div>
                       <div style={{display:"flex",gap:4}}><button style={S.iconBtn} onClick={()=>startEditBudget(b)}>✎</button><button style={{...S.iconBtn,...S.iconBtnDel}} onClick={()=>confirmDeleteBudget(b.id)}>✕</button></div>
@@ -1713,7 +1714,7 @@ const styles = {
   navBtnActive:{background:"#eef2ff",color:"#4f46e5"},
   navIcon:{fontSize:16,width:18,textAlign:"center"},
   exportSideBtn:{marginTop:12,background:"#f8fafc",border:"1px solid #e2e8f0",color:"#64748b",borderRadius:10,padding:"9px 14px",cursor:"pointer",fontSize:14,fontWeight:500},
-  sidebalBox:{marginTop:"auto",background:"#f8fafc",borderRadius:12,padding:"14px",border:"1px solid #e2e8f0"},
+  sidebalBox:{marginTop:"auto",marginBottom:16,background:"#f8fafc",borderRadius:12,padding:"14px",border:"1px solid #e2e8f0"},
   sidebalLabel:{fontSize:12,color:"#94a3b8",textTransform:"uppercase",letterSpacing:"0.08em",margin:0},
   sidebalAmt:{fontSize:19,fontWeight:700,margin:"4px 0 0"},
   main:{flex:1,overflowY:"auto",background:"#f8fafc",minWidth:0,width:"100%"},
