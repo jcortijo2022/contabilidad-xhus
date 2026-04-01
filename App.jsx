@@ -1272,7 +1272,7 @@ export default function App() {
 
             {/* Period + type filters */}
             <div style={{display:"flex",gap:6,marginBottom:8,flexWrap:"wrap",alignItems:"center"}}>
-              {[["30d","30d"],["90d","90d"],["all","Todo"],["upcoming","Próx."]].map(([v,l])=>(
+              {[["30d","30 días"],["90d","90 días"],["all","Todo"],["upcoming","Próximos"]].map(([v,l])=>(
                 <button key={v} style={{...S.tab,...(filterPeriod===v?S.tabActive:{}),borderRadius:8,border:"1px solid #e2e8f0",padding:"6px 10px",fontSize:12}} onClick={()=>{setFilterPeriod(v);setDateFrom("");setDateTo("");setShowMonthPicker(false);}}>
                   {l}
                 </button>
@@ -1294,11 +1294,7 @@ export default function App() {
                   </div>
                 )}
               </div>
-              <div style={{...S.tabs,marginLeft:"auto"}}>
-                {[["all","Todos"],["ingreso","↑"],["gasto","↓"]].map(([v,l])=>(
-                  <button key={v} style={{...S.tab,...(filter===v?S.tabActive:{})}} onClick={()=>setFilter(v)}>{l}</button>
-                ))}
-              </div>
+
             </div>
             {/* Search + account + category */}
             <div style={{display:"flex",gap:8,marginBottom:12,flexWrap:"wrap",alignItems:"center"}}>
@@ -1314,13 +1310,7 @@ export default function App() {
                 {[...new Set([...CATEGORIES.ingreso,...CATEGORIES.gasto])].sort().map(c=><option key={c} value={c}>{c}</option>)}
               </select>
             </div>
-            <div style={{display:"flex",gap:10,marginBottom:16,flexWrap:"wrap",alignItems:"center"}}>
-              <label style={{fontSize:13,color:"#64748b",fontWeight:600}}>Desde</label>
-              <input style={{...S.search,width:"auto"}} type="date" value={dateFrom} onChange={e=>setDateFrom(e.target.value)}/>
-              <label style={{fontSize:13,color:"#64748b",fontWeight:600}}>Hasta</label>
-              <input style={{...S.search,width:"auto"}} type="date" value={dateTo} onChange={e=>setDateTo(e.target.value)}/>
-              {(dateFrom||dateTo)&&<button style={{...S.btnCancel,padding:"8px 12px",fontSize:13}} onClick={()=>{setDateFrom("");setDateTo("");}}>✕ Limpiar</button>}
-            </div>
+
             <div style={S.card}>
               {txWithBalance.length===0&&<p style={S.empty}>No se encontraron movimientos</p>}
               {txWithBalance.map(t=><TxRow key={t.id} t={t} accounts={accounts} onEdit={startEditTx} onDelete={confirmDeleteTx} showBalance={true}/>)}
@@ -1464,8 +1454,8 @@ export default function App() {
                   <div key={b.id} style={{...S.budgetCard,borderTop:`3px solid ${barColor}`,cursor:"pointer"}} onClick={()=>setBudgetDetail(budgetDetail===b.category?null:b.category)}>
                     <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:10}}>
                       <div><p style={{margin:0,fontWeight:700,color:"#0f172a",fontSize:15}}>{b.category}</p>{over&&<span style={S.badgeDanger}>⚠ Excedido</span>}{warn&&<span style={S.badgeWarn}>⚡ Cerca</span>}</div>
-                      <div style={{display:"flex",gap:4}}><button style={S.iconBtn} onClick={()=>startEditBudget(b)}>✎</button><button style={{...S.iconBtn,...S.iconBtnDel}} onClick={()=>confirmDeleteBudget(b.id)}>✕</button></div>
-                    </div>
+                      <div><p style={{margin:0,fontWeight:700,color:"#0f172a",fontSize:15}}>{b.category}</p>{over&&<span style={S.badgeDanger}>⚠ Excedido</span>}{warn&&<span style={S.badgeWarn}>⚡ Cerca</span>}</div>
+                      <div style={{display:"flex",gap:4}}><button style={S.iconBtn} onClick={e=>{e.stopPropagation();startEditBudget(b);}}>✎</button><button style={{...S.iconBtn,...S.iconBtnDel}} onClick={e=>{e.stopPropagation();confirmDeleteBudget(b.id);}}>✕</button></div>
                     <div style={{display:"flex",justifyContent:"space-between",marginBottom:6}}><span style={{fontSize:13,color:"#64748b"}}>Gastado: <b style={{color:over?"#dc2626":"#1e293b"}}>{fmx(b.spent)}</b></span><span style={{fontSize:13,color:"#94a3b8"}}>Límite: {fmx(b.amount)}</span></div>
                     <div style={S.progTrack}><div style={{...S.progBar,width:`${pct}%`,background:`linear-gradient(90deg,${barColor},${barColor}99)`}}/></div>
                     <div style={{display:"flex",justifyContent:"space-between",marginTop:6}}><span style={{fontSize:12,color:"#94a3b8"}}>{pct.toFixed(0)}% usado</span><span style={{fontSize:12,color:over?"#dc2626":"#059669"}}>{over?`-${fmx(b.spent-b.amount)} excedido`:`${fmx(b.amount-b.spent)} libre`}</span></div>
@@ -1473,6 +1463,21 @@ export default function App() {
                 );
               })}
             </div>
+            {budgetDetail && (
+              <div style={{...S.card,marginTop:16,background:"#f8fafc",border:"1px solid #e2e8f0"}}>
+                <div style={{display:"flex",justifyContent:"space-between",marginBottom:10}}>
+                  <h2 style={S.cardTitle}>Movimientos: {budgetDetail}</h2>
+                  <button style={S.linkBtn} onClick={()=>setBudgetDetail(null)}>✕ Cerrar</button>
+                </div>
+                {(()=>{
+                  const todayStr=today();
+                  const txs=transactions.filter(t=>t.type==="gasto"&&t.category===budgetDetail&&t.date>=startOfSelMonth&&t.date<=endOfSelMonth&&t.date<=todayStr);
+                  return txs.length===0
+                    ? <p style={S.empty}>Sin movimientos en este período</p>
+                    : txs.sort((a,b)=>b.date.localeCompare(a.date)).map(t=><TxRow key={t.id} t={t} accounts={accounts} onEdit={startEditTx} onDelete={confirmDeleteTx} showBalance={false}/>);
+                })()}
+              </div>
+            )}
           </div>
         )}
 
@@ -1714,7 +1719,7 @@ const styles = {
   navBtnActive:{background:"#eef2ff",color:"#4f46e5"},
   navIcon:{fontSize:16,width:18,textAlign:"center"},
   exportSideBtn:{marginTop:12,background:"#f8fafc",border:"1px solid #e2e8f0",color:"#64748b",borderRadius:10,padding:"9px 14px",cursor:"pointer",fontSize:14,fontWeight:500},
-  sidebalBox:{marginTop:"auto",marginBottom:16,background:"#f8fafc",borderRadius:12,padding:"14px",border:"1px solid #e2e8f0"},
+  sidebalBox:{marginTop:"auto",marginBottom:28,background:"#f8fafc",borderRadius:12,padding:"14px",border:"1px solid #e2e8f0"},
   sidebalLabel:{fontSize:12,color:"#94a3b8",textTransform:"uppercase",letterSpacing:"0.08em",margin:0},
   sidebalAmt:{fontSize:19,fontWeight:700,margin:"4px 0 0"},
   main:{flex:1,overflowY:"auto",background:"#f8fafc",minWidth:0,width:"100%"},
