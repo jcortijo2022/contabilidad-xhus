@@ -973,7 +973,7 @@ export default function App() {
                 {label:"Patrimonio",   value:patrimonio,       color:"#7c3aed", bg:"#f5f3ff", border:"#ddd6fe"},
               ].map(({label,value,color,bg,border})=>(
                 <div key={label} style={{borderRadius:14,padding:"14px 16px",background:bg,border:`1px solid ${border}`}}>
-                  <p style={{fontSize:11,color:"#64748b",textTransform:"uppercase",letterSpacing:"0.06em",margin:0}}>{label}</p>
+                  <p style={{fontSize:12,color:"#64748b",textTransform:"uppercase",letterSpacing:"0.06em",margin:0}}>{label}</p>
                   <p style={{fontSize:isMobile?16:20,fontWeight:700,margin:"4px 0 0",color}}>{fmx(value)}</p>
                 </div>
               ))}
@@ -1054,7 +1054,7 @@ export default function App() {
                           <span style={{fontSize:18}}>{a.icon}</span>
                           <div style={{flex:1,minWidth:0}}>
                             <p style={{margin:0,fontSize:13,fontWeight:600,color:"#1e293b",wordBreak:"break-word"}}>{a.name}</p>
-                            <p style={{margin:0,fontSize:11,color:"#94a3b8"}}>{a.bank}</p>
+                            <p style={{margin:0,fontSize:12,color:"#94a3b8"}}>{a.bank}</p>
                           </div>
                           <p style={{margin:0,fontWeight:700,color:tot.balance>=0?"#059669":"#dc2626",fontSize:14,flexShrink:0}}>{fmx(tot.balance)}</p>
                         </div>
@@ -1095,7 +1095,7 @@ export default function App() {
                 ...ACCOUNT_TYPES.map(type=>({label:ACCOUNT_TYPE_LABELS[type],value:accounts.filter(a=>(a.type||"cuenta")===type).reduce((s,a)=>{const t=accountTotals[a.id]; return s+(t?t.balance:a.balance);},0),color:ACCOUNT_TYPE_COLORS[type],bg:type==="cuenta"?"#eef2ff":type==="deposito"?"#f0fdf4":"#fffbeb",border:type==="cuenta"?"#c7d2fe":type==="deposito"?"#bbf7d0":"#fde68a"}))
               ].map(({label,value,color,bg,border})=>(
                 <div key={label} style={{borderRadius:14,padding:"14px 16px",background:bg,border:`1px solid ${border}`}}>
-                  <p style={{fontSize:11,color:"#64748b",textTransform:"uppercase",letterSpacing:"0.06em",margin:0}}>{label}</p>
+                  <p style={{fontSize:12,color:"#64748b",textTransform:"uppercase",letterSpacing:"0.06em",margin:0}}>{label}</p>
                   <p style={{fontSize:isMobile?15:20,fontWeight:700,margin:"4px 0 0",color}}>{fmx(value)}</p>
                 </div>
               ))}
@@ -1146,10 +1146,10 @@ export default function App() {
                           </div>
                           <p style={{margin:"0 0 12px",fontSize:22,fontWeight:700,color:tot.balance>=0?"#059669":"#dc2626"}}>{fmx(tot.balance)}</p>
                           <div style={{display:"flex",justifyContent:"space-between",borderTop:"1px solid #f1f5f9",paddingTop:10}}>
-                            <div style={{textAlign:"center"}}><p style={{margin:0,fontSize:11,color:"#94a3b8"}}>Ingresos</p><p style={{margin:0,fontSize:13,color:"#059669",fontWeight:600}}>{fmx(tot.ingresos)}</p></div>
-                            <div style={{textAlign:"center"}}><p style={{margin:0,fontSize:11,color:"#94a3b8"}}>Gastos</p><p style={{margin:0,fontSize:13,color:"#dc2626",fontWeight:600}}>{fmx(tot.gastos)}</p></div>
-                            <div style={{textAlign:"center"}}><p style={{margin:0,fontSize:11,color:"#94a3b8"}}>Balance mov.</p><p style={{margin:0,fontSize:13,color:tot.ingresos-tot.gastos>=0?"#059669":"#dc2626",fontWeight:600}}>{fmx(tot.ingresos-tot.gastos)}</p></div>
-                            <div style={{textAlign:"center"}}><p style={{margin:0,fontSize:11,color:"#94a3b8"}}>Movs.</p><p style={{margin:0,fontSize:13,color:"#4f46e5",fontWeight:600}}>{tot.txCount}</p></div>
+                            <div style={{textAlign:"center"}}><p style={{margin:0,fontSize:12,color:"#94a3b8"}}>Ingresos</p><p style={{margin:0,fontSize:13,color:"#059669",fontWeight:600}}>{fmx(tot.ingresos)}</p></div>
+                            <div style={{textAlign:"center"}}><p style={{margin:0,fontSize:12,color:"#94a3b8"}}>Gastos</p><p style={{margin:0,fontSize:13,color:"#dc2626",fontWeight:600}}>{fmx(tot.gastos)}</p></div>
+                            <div style={{textAlign:"center"}}><p style={{margin:0,fontSize:12,color:"#94a3b8"}}>Balance mov.</p><p style={{margin:0,fontSize:13,color:tot.ingresos-tot.gastos>=0?"#059669":"#dc2626",fontWeight:600}}>{fmx(tot.ingresos-tot.gastos)}</p></div>
+                            <div style={{textAlign:"center"}}><p style={{margin:0,fontSize:12,color:"#94a3b8"}}>Movs.</p><p style={{margin:0,fontSize:13,color:"#4f46e5",fontWeight:600}}>{tot.txCount}</p></div>
                           </div>
                           {a.type==="deposito"&&(a.dep1_end||a.dep2_end)&&(
                             <div style={{marginTop:8,display:"flex",flexDirection:"column",gap:4}}>
@@ -1202,12 +1202,12 @@ export default function App() {
                           </div>
                         </div>
                         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:8}}>
-                          <div><p style={{margin:0,fontSize:11,color:"#94a3b8"}}>Compra</p><p style={{margin:0,fontSize:14,fontWeight:600,color:"#1e293b"}}>{fmx(s.buy_price)}</p><p style={{margin:0,fontSize:11,color:"#94a3b8"}}>{s.buy_date}</p></div>
-                          <div><p style={{margin:0,fontSize:11,color:"#94a3b8"}}>{s.priceSource==="live"?"Precio actual":s.priceSource==="manual"?"Precio manual":"Precio compra"}</p><p style={{margin:0,fontSize:14,fontWeight:600,color:"#1e293b"}}>{fmx(s.currentPrice)}</p>{s.priceSource==="live"&&<p style={{margin:0,fontSize:11,color:"#4f46e5"}}>🟢 En vivo</p>}{s.priceSource==="manual"&&<p style={{margin:0,fontSize:11,color:"#d97706"}}>✏️ Manual</p>}</div>
+                          <div><p style={{margin:0,fontSize:12,color:"#94a3b8"}}>Compra</p><p style={{margin:0,fontSize:14,fontWeight:600,color:"#1e293b"}}>{fmx(s.buy_price)}</p><p style={{margin:0,fontSize:12,color:"#94a3b8"}}>{s.buy_date}</p></div>
+                          <div><p style={{margin:0,fontSize:12,color:"#94a3b8"}}>{s.priceSource==="live"?"Precio actual":s.priceSource==="manual"?"Precio manual":"Precio compra"}</p><p style={{margin:0,fontSize:14,fontWeight:600,color:"#1e293b"}}>{fmx(s.currentPrice)}</p>{s.priceSource==="live"&&<p style={{margin:0,fontSize:12,color:"#4f46e5"}}>🟢 En vivo</p>}{s.priceSource==="manual"&&<p style={{margin:0,fontSize:12,color:"#d97706"}}>✏️ Manual</p>}</div>
                         </div>
                         <div style={{borderTop:"1px solid #f1f5f9",paddingTop:8,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-                          <div><p style={{margin:0,fontSize:11,color:"#94a3b8"}}>Invertido</p><p style={{margin:0,fontSize:14,fontWeight:600,color:"#1e293b"}}>{fmx(s.invested)}</p></div>
-                          <div style={{textAlign:"right"}}><p style={{margin:0,fontSize:11,color:"#94a3b8"}}>Resultado</p><p style={{margin:0,fontSize:15,fontWeight:700,color:s.gain>=0?"#059669":"#dc2626"}}>{s.gain>=0?"+":""}{fmx(s.gain)} ({s.gainPct>=0?"+":""}{s.gainPct.toFixed(1)}%)</p></div>
+                          <div><p style={{margin:0,fontSize:12,color:"#94a3b8"}}>Invertido</p><p style={{margin:0,fontSize:14,fontWeight:600,color:"#1e293b"}}>{fmx(s.invested)}</p></div>
+                          <div style={{textAlign:"right"}}><p style={{margin:0,fontSize:12,color:"#94a3b8"}}>Resultado</p><p style={{margin:0,fontSize:15,fontWeight:700,color:s.gain>=0?"#059669":"#dc2626"}}>{s.gain>=0?"+":""}{fmx(s.gain)} ({s.gainPct>=0?"+":""}{s.gainPct.toFixed(1)}%)</p></div>
                         </div>
                       </div>
                     );
@@ -1365,8 +1365,8 @@ export default function App() {
                     </div>
                     <p style={{margin:"0 0 10px",fontSize:22,fontWeight:700,color:isIng?"#059669":"#dc2626"}}>{isIng?"+":"-"}{fmx(r.amount)}</p>
                     <div style={{borderTop:"1px solid #f1f5f9",paddingTop:10,display:"flex",justifyContent:"space-between"}}>
-                      <div><p style={{margin:0,fontSize:11,color:"#94a3b8"}}>Próxima fecha</p><p style={{margin:0,fontSize:14,color:"#1e293b",fontWeight:600}}>{r.next_date}</p></div>
-                      {r.end_date&&<div style={{textAlign:"right"}}><p style={{margin:0,fontSize:11,color:"#94a3b8"}}>Fecha fin</p><p style={{margin:0,fontSize:14,color:"#1e293b",fontWeight:600}}>{r.end_date}</p></div>}
+                      <div><p style={{margin:0,fontSize:12,color:"#94a3b8"}}>Próxima fecha</p><p style={{margin:0,fontSize:14,color:"#1e293b",fontWeight:600}}>{r.next_date}</p></div>
+                      {r.end_date&&<div style={{textAlign:"right"}}><p style={{margin:0,fontSize:12,color:"#94a3b8"}}>Fecha fin</p><p style={{margin:0,fontSize:14,color:"#1e293b",fontWeight:600}}>{r.end_date}</p></div>}
                     </div>
                   </div>
                 );
@@ -1468,12 +1468,12 @@ export default function App() {
                           <button style={{...S.iconBtn,...S.iconBtnDel}} onClick={()=>deleteStock(s.id)}>✕</button>
                         </div>
                         <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:8}}>
-                          <div><p style={{margin:0,fontSize:11,color:"#94a3b8"}}>Compra</p><p style={{margin:0,fontSize:13,fontWeight:600}}>{fmx(s.buy_price)}</p><p style={{margin:0,fontSize:11,color:"#94a3b8"}}>{s.buy_date}</p></div>
-                          <div><p style={{margin:0,fontSize:11,color:"#94a3b8"}}>Venta</p><p style={{margin:0,fontSize:13,fontWeight:600}}>{fmx(s.sell_price||0)}</p><p style={{margin:0,fontSize:11,color:"#94a3b8"}}>{s.sell_date}</p></div>
+                          <div><p style={{margin:0,fontSize:12,color:"#94a3b8"}}>Compra</p><p style={{margin:0,fontSize:13,fontWeight:600}}>{fmx(s.buy_price)}</p><p style={{margin:0,fontSize:12,color:"#94a3b8"}}>{s.buy_date}</p></div>
+                          <div><p style={{margin:0,fontSize:12,color:"#94a3b8"}}>Venta</p><p style={{margin:0,fontSize:13,fontWeight:600}}>{fmx(s.sell_price||0)}</p><p style={{margin:0,fontSize:12,color:"#94a3b8"}}>{s.sell_date}</p></div>
                         </div>
                         <div style={{background:s.gain>=0?"#f0fdf4":"#fef2f2",borderRadius:8,padding:"8px 10px",display:"flex",justifyContent:"space-between"}}>
-                          <div><p style={{margin:0,fontSize:11,color:"#94a3b8"}}>Invertido</p><p style={{margin:0,fontSize:14,fontWeight:600}}>{fmx(s.invested)}</p></div>
-                          <div style={{textAlign:"right"}}><p style={{margin:0,fontSize:11,color:"#94a3b8"}}>Resultado</p><p style={{margin:0,fontSize:15,fontWeight:700,color:s.gain>=0?"#059669":"#dc2626"}}>{s.gain>=0?"+":""}{fmx(s.gain)} ({s.gainPct>=0?"+":""}{s.gainPct.toFixed(1)}%)</p></div>
+                          <div><p style={{margin:0,fontSize:12,color:"#94a3b8"}}>Invertido</p><p style={{margin:0,fontSize:14,fontWeight:600}}>{fmx(s.invested)}</p></div>
+                          <div style={{textAlign:"right"}}><p style={{margin:0,fontSize:12,color:"#94a3b8"}}>Resultado</p><p style={{margin:0,fontSize:15,fontWeight:700,color:s.gain>=0?"#059669":"#dc2626"}}>{s.gain>=0?"+":""}{fmx(s.gain)} ({s.gainPct>=0?"+":""}{s.gainPct.toFixed(1)}%)</p></div>
                         </div>
                       </div>
                     );
@@ -1523,7 +1523,7 @@ export default function App() {
                       <div style={{flex:1,minWidth:0}}>
                         <p style={{margin:0,fontWeight:700,color:"#0f172a",fontSize:16,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>⌂ {p.name}</p>
                         {p.address&&<p style={{margin:0,fontSize:12,color:"#94a3b8",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{p.address}</p>}
-                        <span style={{display:"inline-block",background:(p.participation||100)===50?"#eff6ff":"#f0fdf4",color:(p.participation||100)===50?"#3b82f6":"#059669",fontSize:11,padding:"2px 7px",borderRadius:5,fontWeight:700,marginTop:2}}>{p.participation||100}%</span>
+                        <span style={{display:"inline-block",background:(p.participation||100)===50?"#eff6ff":"#f0fdf4",color:(p.participation||100)===50?"#3b82f6":"#059669",fontSize:12,padding:"2px 7px",borderRadius:5,fontWeight:700,marginTop:2}}>{p.participation||100}%</span>
                       </div>
                       <div style={{display:"flex",gap:4,marginLeft:8}}>
                         <button style={S.iconBtn} onClick={()=>startEditProp(p)}>✎</button>
@@ -1531,15 +1531,15 @@ export default function App() {
                       </div>
                     </div>
                     <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:12}}>
-                      {p.size_m2&&<div><p style={{margin:0,fontSize:11,color:"#94a3b8"}}>Superficie</p><p style={{margin:0,fontSize:14,fontWeight:600,color:"#1e293b"}}>{p.size_m2} m²</p></div>}
-                      {p.year_built&&<div><p style={{margin:0,fontSize:11,color:"#94a3b8"}}>Año construcción</p><p style={{margin:0,fontSize:14,fontWeight:600,color:"#1e293b"}}>{p.year_built}</p></div>}
-                      <div><p style={{margin:0,fontSize:11,color:"#94a3b8"}}>Precio compra ({p.participation||100}%)</p><p style={{margin:0,fontSize:14,fontWeight:600,color:"#1e293b"}}>{fmx(myBuyPrice)}</p><p style={{margin:0,fontSize:11,color:"#94a3b8"}}>{p.buy_date}</p></div>
-                      {p.cadastral_value&&<div><p style={{margin:0,fontSize:11,color:"#94a3b8"}}>Valor catastral</p><p style={{margin:0,fontSize:14,fontWeight:600,color:"#1e293b"}}>{fmx(p.cadastral_value)}</p></div>}
+                      {p.size_m2&&<div><p style={{margin:0,fontSize:12,color:"#94a3b8"}}>Superficie</p><p style={{margin:0,fontSize:14,fontWeight:600,color:"#1e293b"}}>{p.size_m2} m²</p></div>}
+                      {p.year_built&&<div><p style={{margin:0,fontSize:12,color:"#94a3b8"}}>Año construcción</p><p style={{margin:0,fontSize:14,fontWeight:600,color:"#1e293b"}}>{p.year_built}</p></div>}
+                      <div><p style={{margin:0,fontSize:12,color:"#94a3b8"}}>Precio compra ({p.participation||100}%)</p><p style={{margin:0,fontSize:14,fontWeight:600,color:"#1e293b"}}>{fmx(myBuyPrice)}</p><p style={{margin:0,fontSize:12,color:"#94a3b8"}}>{p.buy_date}</p></div>
+                      {p.cadastral_value&&<div><p style={{margin:0,fontSize:12,color:"#94a3b8"}}>Valor catastral</p><p style={{margin:0,fontSize:14,fontWeight:600,color:"#1e293b"}}>{fmx(p.cadastral_value)}</p></div>}
                     </div>
                     <div style={{background:gain>=0?"#f0fdf4":"#fef2f2",borderRadius:10,padding:"10px 12px"}}>
                       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-                        <div><p style={{margin:0,fontSize:11,color:"#94a3b8"}}>Valor estimado ({p.participation||100}%)</p><p style={{margin:0,fontSize:18,fontWeight:700,color:gain>=0?"#059669":"#dc2626"}}>{fmx(estPrice)}</p></div>
-                        <div style={{textAlign:"right"}}><p style={{margin:0,fontSize:11,color:"#94a3b8"}}>Plusvalía</p><p style={{margin:0,fontSize:15,fontWeight:700,color:gain>=0?"#059669":"#dc2626"}}>{gain>=0?"+":""}{fmx(gain)}</p><p style={{margin:0,fontSize:12,color:gain>=0?"#059669":"#dc2626"}}>{gainPct>=0?"+":""}{gainPct.toFixed(1)}% · {annualReturn.toFixed(1)}%/año</p></div>
+                        <div><p style={{margin:0,fontSize:12,color:"#94a3b8"}}>Valor estimado ({p.participation||100}%)</p><p style={{margin:0,fontSize:18,fontWeight:700,color:gain>=0?"#059669":"#dc2626"}}>{fmx(estPrice)}</p></div>
+                        <div style={{textAlign:"right"}}><p style={{margin:0,fontSize:12,color:"#94a3b8"}}>Plusvalía</p><p style={{margin:0,fontSize:15,fontWeight:700,color:gain>=0?"#059669":"#dc2626"}}>{gain>=0?"+":""}{fmx(gain)}</p><p style={{margin:0,fontSize:12,color:gain>=0?"#059669":"#dc2626"}}>{gainPct>=0?"+":""}{gainPct.toFixed(1)}% · {annualReturn.toFixed(1)}%/año</p></div>
                       </div>
                     </div>
                   </div>
@@ -1619,18 +1619,18 @@ export default function App() {
                       </div>
                     </div>
                     <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:12}}>
-                      <div><p style={{margin:0,fontSize:11,color:"#94a3b8"}}>Deuda total</p><p style={{margin:0,fontSize:15,fontWeight:700,color:"#dc2626"}}>{fmx(d.total_amount)}</p></div>
-                      <div><p style={{margin:0,fontSize:11,color:"#94a3b8"}}>Tu parte ({d.participation}%)</p><p style={{margin:0,fontSize:15,fontWeight:700,color:"#dc2626"}}>{fmx(myAmt)}</p></div>
-                      <div><p style={{margin:0,fontSize:11,color:"#94a3b8"}}>Pago mensual total</p><p style={{margin:0,fontSize:14,fontWeight:600,color:"#d97706"}}>{fmx(d.monthly_payment)}</p></div>
-                      <div><p style={{margin:0,fontSize:11,color:"#94a3b8"}}>Tu pago mensual</p><p style={{margin:0,fontSize:14,fontWeight:600,color:"#d97706"}}>{fmx(myMonthly)}</p></div>
+                      <div><p style={{margin:0,fontSize:12,color:"#94a3b8"}}>Deuda total</p><p style={{margin:0,fontSize:15,fontWeight:700,color:"#dc2626"}}>{fmx(d.total_amount)}</p></div>
+                      <div><p style={{margin:0,fontSize:12,color:"#94a3b8"}}>Tu parte ({d.participation}%)</p><p style={{margin:0,fontSize:15,fontWeight:700,color:"#dc2626"}}>{fmx(myAmt)}</p></div>
+                      <div><p style={{margin:0,fontSize:12,color:"#94a3b8"}}>Pago mensual total</p><p style={{margin:0,fontSize:14,fontWeight:600,color:"#d97706"}}>{fmx(d.monthly_payment)}</p></div>
+                      <div><p style={{margin:0,fontSize:12,color:"#94a3b8"}}>Tu pago mensual</p><p style={{margin:0,fontSize:14,fontWeight:600,color:"#d97706"}}>{fmx(myMonthly)}</p></div>
                     </div>
                     <div style={{marginBottom:8}}>
                       <div style={{display:"flex",justifyContent:"space-between",marginBottom:4}}><span style={{fontSize:12,color:"#64748b"}}>Progreso</span><span style={{fontSize:12,color:"#64748b"}}>{pct.toFixed(0)}%</span></div>
                       <div style={S.progTrack}><div style={{...S.progBar,width:`${pct}%`,background:"linear-gradient(90deg,#dc2626,#f87171)"}}/></div>
                     </div>
                     <div style={{display:"flex",justifyContent:"space-between",borderTop:"1px solid #f1f5f9",paddingTop:10}}>
-                      <div><p style={{margin:0,fontSize:11,color:"#94a3b8"}}>Pendiente aprox.</p><p style={{margin:0,fontSize:14,fontWeight:700,color:"#dc2626"}}>{fmx(remaining)}</p></div>
-                      <div style={{textAlign:"right"}}><p style={{margin:0,fontSize:11,color:"#94a3b8"}}>Fecha fin</p><p style={{margin:0,fontSize:14,fontWeight:600,color:"#64748b"}}>{d.end_date}</p></div>
+                      <div><p style={{margin:0,fontSize:12,color:"#94a3b8"}}>Pendiente aprox.</p><p style={{margin:0,fontSize:14,fontWeight:700,color:"#dc2626"}}>{fmx(remaining)}</p></div>
+                      <div style={{textAlign:"right"}}><p style={{margin:0,fontSize:12,color:"#94a3b8"}}>Fecha fin</p><p style={{margin:0,fontSize:14,fontWeight:600,color:"#64748b"}}>{d.end_date}</p></div>
                     </div>
                   </div>
                 );
@@ -1651,12 +1651,12 @@ function TxRow({ t, accounts, onEdit, onDelete, showBalance }) {
     <div style={styles.txRow}>
       <div style={{...styles.txDot,background:isIng?"#34d399":"#f87171"}}/>
       <div style={styles.txInfo}>
-        <span style={styles.txDesc}>{t.description}{isRec&&<span style={{fontSize:11,color:"#4f46e5",marginLeft:6,fontWeight:600}}>↺</span>}</span>
+        <span style={styles.txDesc}>{t.description}{isRec&&<span style={{fontSize:12,color:"#4f46e5",marginLeft:6,fontWeight:600}}>↺</span>}</span>
         <span style={styles.txMeta}>{t.category} · {t.date}{acc?` · ${acc.icon} ${acc.name}`:""}</span>
       </div>
       <div style={{textAlign:"right",flexShrink:0}}>
         <span style={{...styles.txAmount,color:isIng?"#059669":"#dc2626",display:"block"}}>{isIng?"+":"-"}{new Intl.NumberFormat("es-ES",{style:"currency",currency:"EUR"}).format(t.amount)}</span>
-        {showBalance&&t.runningBalance!==null&&t.runningBalance!==undefined&&<span style={{fontSize:11,color:"#94a3b8"}}>Saldo: {new Intl.NumberFormat("es-ES",{style:"currency",currency:"EUR"}).format(t.runningBalance)}</span>}
+        {showBalance&&t.runningBalance!==null&&t.runningBalance!==undefined&&<span style={{fontSize:12,color:"#94a3b8"}}>Saldo: {new Intl.NumberFormat("es-ES",{style:"currency",currency:"EUR"}).format(t.runningBalance)}</span>}
       </div>
       <div style={styles.txActions}>
         <button style={styles.iconBtn} onClick={()=>onEdit(t)}>✎</button>
@@ -1678,11 +1678,11 @@ const styles = {
   navIcon:{fontSize:16,width:18,textAlign:"center"},
   exportSideBtn:{marginTop:12,background:"#f8fafc",border:"1px solid #e2e8f0",color:"#64748b",borderRadius:10,padding:"9px 14px",cursor:"pointer",fontSize:14,fontWeight:500},
   sidebalBox:{marginTop:"auto",background:"#f8fafc",borderRadius:12,padding:"14px",border:"1px solid #e2e8f0"},
-  sidebalLabel:{fontSize:11,color:"#94a3b8",textTransform:"uppercase",letterSpacing:"0.08em",margin:0},
+  sidebalLabel:{fontSize:12,color:"#94a3b8",textTransform:"uppercase",letterSpacing:"0.08em",margin:0},
   sidebalAmt:{fontSize:19,fontWeight:700,margin:"4px 0 0"},
   main:{flex:1,overflowY:"auto",background:"#f8fafc",minWidth:0,width:"100%"},
   page:{padding:"32px 36px",maxWidth:1100,margin:"0 auto",boxSizing:"border-box",width:"100%"},
-  pageTitle:{fontSize:26,fontWeight:700,margin:0,color:"#0f172a"},
+  pageTitle:{fontSize:24,fontWeight:700,margin:0,color:"#0f172a"},
   pageSub:{color:"#94a3b8",marginTop:4,marginBottom:24,fontSize:14},
   pageHeader:{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:20,flexWrap:"wrap",gap:10},
   card:{background:"#ffffff",borderRadius:16,padding:"20px 22px",marginBottom:16,border:"1px solid #e2e8f0",boxShadow:"0 1px 4px rgba(0,0,0,.04)"},
@@ -1722,7 +1722,7 @@ const styles = {
   modalBtns:{display:"flex",gap:8,justifyContent:"flex-end",marginTop:20},
   exportBtn:{display:"flex",alignItems:"center",gap:14,padding:"14px 16px",background:"#f8fafc",border:"1px solid #e2e8f0",borderRadius:12,cursor:"pointer",color:"#1e293b",textAlign:"left",width:"100%",fontSize:15,fontWeight:600},
   toast:{position:"fixed",top:18,right:18,color:"#fff",padding:"11px 20px",borderRadius:12,fontWeight:600,fontSize:14,zIndex:999,boxShadow:"0 8px 24px rgba(0,0,0,.15)"},
-  badgeDanger:{display:"inline-block",background:"#fef2f2",color:"#dc2626",fontSize:11,padding:"2px 7px",borderRadius:5,fontWeight:600,marginTop:2},
-  badgeWarn:{display:"inline-block",background:"#fffbeb",color:"#d97706",fontSize:11,padding:"2px 7px",borderRadius:5,fontWeight:600,marginTop:2},
+  badgeDanger:{display:"inline-block",background:"#fef2f2",color:"#dc2626",fontSize:12,padding:"2px 7px",borderRadius:5,fontWeight:600,marginTop:2},
+  badgeWarn:{display:"inline-block",background:"#fffbeb",color:"#d97706",fontSize:12,padding:"2px 7px",borderRadius:5,fontWeight:600,marginTop:2},
   linkBtn:{background:"none",border:"none",color:"#4f46e5",cursor:"pointer",fontSize:13},
 };
