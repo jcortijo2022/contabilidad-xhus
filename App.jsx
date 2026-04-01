@@ -38,11 +38,12 @@ const recLabel = {monthly:"Mensual", quarterly:"Trimestral", yearly:"Anual"};
 const capFirst = s => s.replace(/^\w/, c => c.toUpperCase());
 
 function getNextDate(dateStr, recurrence) {
-  const d = new Date(dateStr + "T00:00:00");
-  if(recurrence === "monthly")   d.setMonth(d.getMonth() + 1);
-  if(recurrence === "quarterly") d.setMonth(d.getMonth() + 3);
-  if(recurrence === "yearly")    d.setFullYear(d.getFullYear() + 1);
-  return d.toISOString().split("T")[0];
+  const [y, m, d] = dateStr.split("-").map(Number);
+  let ny = y, nm = m, nd = d;
+  if(recurrence === "monthly")   { nm += 1; if(nm > 12) { nm = 1; ny += 1; } }
+  if(recurrence === "quarterly") { nm += 3; if(nm > 12) { nm -= 12; ny += 1; } }
+  if(recurrence === "yearly")    { ny += 1; }
+  return `${ny}-${String(nm).padStart(2,"0")}-${String(nd).padStart(2,"0")}`;
 }
 
 function daysUntil(dateStr) {
