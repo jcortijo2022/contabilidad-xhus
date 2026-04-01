@@ -273,7 +273,7 @@ export default function App() {
   const [txForm, setTxForm] = useState({ date:today(), description:"", category:"", type:"gasto", amount:"", account_id:"", recurrence:"none", recurrence_end:"" });
   const [accForm, setAccForm] = useState({ name:"", bank:"", color:ACCOUNT_COLORS[0], icon:ACCOUNT_ICONS[0], balance:"", type:"cuenta", sort_order:0, dep1_amount:"", dep1_start:"", dep1_end:"", dep1_rate:"", dep2_amount:"", dep2_start:"", dep2_end:"", dep2_rate:"" });
   const [budgetForm, setBudgetForm] = useState({ category:"", amount:"" });
-  const [recForm, setRecForm] = useState({ amount:"", type:"gasto", category:"", account_id:"" });
+  const [recForm, setRecForm] = useState({ amount:"", type:"gasto", category:"", account_id:"", next_date:"" });
   const [stockForm, setStockForm] = useState({ account_id:"", name:"", ticker:"", buy_date:today(), buy_price:"", quantity:"", sell_date:"", sell_price:"", manual_price:"" });
   const [debtForm, setDebtForm] = useState({ name:"", total_amount:"", monthly_payment:"", start_date:today(), end_date:"", participation:100, interest_rate:"" });
   const [propForm, setPropForm] = useState({ name:"", address:"", size_m2:"", year_built:"", buy_price:"", buy_date:today(), cadastral_value:"", estimated_price:"", participation:100 });
@@ -420,10 +420,15 @@ export default function App() {
   const accountTotals = useMemo(()=>{
     const map={};
     const todayStr=today();
+    const curMonth=todayStr.slice(0,7);
+    const curStart=curMonth+"-01";
+    const curEnd=curMonth+"-31";
     accounts.forEach(a=>{
       const ing=transactions.filter(t=>t.account_id===a.id&&t.type==="ingreso"&&t.date<=todayStr).reduce((s,t)=>s+t.amount,0);
       const gas=transactions.filter(t=>t.account_id===a.id&&t.type==="gasto"&&t.date<=todayStr).reduce((s,t)=>s+t.amount,0);
-      map[a.id]={ingresos:ing,gastos:gas,balance:a.balance+ing-gas,txCount:transactions.filter(t=>t.account_id===a.id&&t.date<=todayStr).length};
+      const monthIng=transactions.filter(t=>t.account_id===a.id&&t.type==="ingreso"&&t.date>=curStart&&t.date<=curEnd&&t.date<=todayStr).reduce((s,t)=>s+t.amount,0);
+      const monthGas=transactions.filter(t=>t.account_id===a.id&&t.type==="gasto"&&t.date>=curStart&&t.date<=curEnd&&t.date<=todayStr).reduce((s,t)=>s+t.amount,0);
+      map[a.id]={ingresos:monthIng,gastos:monthGas,balance:a.balance+ing-gas,txCount:transactions.filter(t=>t.account_id===a.id&&t.date>=curStart&&t.date<=curEnd&&t.date<=todayStr).length};
     });
     return map;
   },[accounts,transactions]);
@@ -520,11 +525,26 @@ export default function App() {
   };
   const startEditTx = t=>{setTxForm({date:t.date,description:t.description,category:t.category,type:t.type,amount:String(t.amount),account_id:t.account_id,recurrence:"none",recurrence_end:""}); setEditTx(t.id); setViewPersist("add");};
   const confirmDeleteTx = id=>{setDeleteId(id); setModal("deleteT");};
-  const deleteTx = async()=>{await supabase.from("transactions").delete().eq("id",deleteId); await loadTransactions(); setModal(null); showToast("Eliminado","#f59e0b");};
+  const deleteTx = async()=>{
+    // Find the transaction to delete
+    const tx = transactions.find(t=>t.id===deleteId);
+    if(tx && tx.recurrence && tx.recurrence!=="none") {
+      // Also delete future recurring transactions with same description+account
+      const todayStr = today();
+      const futureIds = transactions
+        .filter(t=>t.description===tx.description&&t.account_id===tx.account_id&&t.recurrence===tx.recurrence&&t.date>todayStr&&t.id!==deleteId)
+        .map(t=>t.id);
+      if(futureIds.length>0) {
+        await supabase.from("transactions").delete().in("id",futureIds);
+      }
+    }
+    await supabase.from("transactions").delete().eq("id",deleteId);
+    await loadTransactions(); setModal(null); showToast("Eliminado","#f59e0b");
+  };
 
   // ── Recurrent CRUD ────────────────────────────────────────────────────────
   const deleteRecurrent = async id=>{await supabase.from("recurrents").delete().eq("id",id); await loadRecurrents(); showToast("Recurrente eliminado","#f59e0b");};
-  const startEditRec = r=>{setRecForm({amount:String(r.amount),type:r.type||"gasto",category:r.category||"",account_id:r.account_id||""}); setEditRec(r.id); setModal("editRec");};
+  const startEditRec = r=>{setRecForm({amount:String(r.amount),type:r.type||"gasto",category:r.category||"",account_id:r.account_id||"",next_date:r.next_date||""}); setEditRec(r.id); setModal("editRec");};
   const saveRecAmount = async()=>{
     const amt=parseFloat(recForm.amount);
     if(isNaN(amt)||amt<=0) return showToast("Importe inválido","#ef4444");
@@ -532,8 +552,19 @@ export default function App() {
     if(recForm.type) payload.type=recForm.type;
     if(recForm.category) payload.category=recForm.category;
     if(recForm.account_id) payload.account_id=recForm.account_id;
+    if(recForm.next_date) payload.next_date=recForm.next_date;
     await supabase.from("recurrents").update(payload).eq("id",editRec);
-    await loadRecurrents(); setModal(null); setEditRec(null); showToast("Recurrente actualizado ✓","#059669");
+    // Update future generated transactions if date changed
+    if(recForm.next_date) {
+      const rec = recurrents.find(r=>r.id===editRec);
+      if(rec) {
+        const todayStr = today();
+        const futureIds = transactions.filter(t=>t.description===rec.description&&t.account_id===rec.account_id&&t.date>todayStr).map(t=>t.id);
+        if(futureIds.length>0) await supabase.from("transactions").delete().in("id",futureIds);
+      }
+    }
+    await loadRecurrents(); await loadTransactions();
+    setModal(null); setEditRec(null); showToast("Recurrente actualizado ✓","#059669");
   };
 
   // ── Account CRUD ──────────────────────────────────────────────────────────
@@ -770,6 +801,9 @@ export default function App() {
               <select style={S.input} value={recForm.account_id||""} onChange={e=>setRecForm(f=>({...f,account_id:e.target.value}))}>
                 {accounts.map(a=><option key={a.id} value={a.id}>{a.icon} {a.name}</option>)}
               </select>
+              <label style={S.label}>Nueva fecha de inicio</label>
+              <input style={S.input} type="date" value={recForm.next_date||""} onChange={e=>setRecForm(f=>({...f,next_date:e.target.value}))}/>
+              <p style={{fontSize:12,color:"#94a3b8",margin:"2px 0 8px"}}>Cambiará los movimientos futuros generados</p>
               <label style={S.label}>Nuevo importe (€)</label>
               <input style={S.input} type="number" placeholder="0.00" value={recForm.amount} onChange={e=>setRecForm(f=>({...f,amount:e.target.value}))}/>
               <div style={S.modalBtns}><button style={S.btnCancel} onClick={()=>setModal(null)}>Cancelar</button><button style={S.btnPrimary} onClick={saveRecAmount}>Guardar</button></div>
@@ -920,7 +954,7 @@ export default function App() {
           <div style={S.logo}><span style={S.logoIcon}>◈</span><span style={S.logoText}>Contabilidad Xhus</span></div>
           <nav style={S.nav}>
             {navItems.map(({v,icon,label})=>(
-              <button key={v} style={{...S.navBtn,...(view===v?S.navBtnActive:{})}} onClick={()=>{setViewPersist(v); if(isMobile) setSidebarOpen(false); if(v!=="add"){setEditTx(null);setTxForm({date:today(),description:"",category:"",type:"gasto",amount:"",account_id:accounts[0]?.id||"",recurrence:"none",recurrence_end:""}); }}}>
+              <button key={v} style={{...S.navBtn,...(view===v?S.navBtnActive:{})}} onClick={()=>{setViewPersist(v); if(isMobile) setSidebarOpen(false); setTimeout(()=>window.scrollTo({top:0,behavior:"smooth"}),50); if(v!=="add"){setEditTx(null);setTxForm({date:today(),description:"",category:"",type:"gasto",amount:"",account_id:accounts[0]?.id||"",recurrence:"none",recurrence_end:""}); }}}>
                 <span style={S.navIcon}>{icon}</span><span>{label}</span>
               </button>
             ))}
@@ -1146,6 +1180,7 @@ export default function App() {
                             </div>
                           </div>
                           <p style={{margin:"0 0 12px",fontSize:22,fontWeight:700,color:tot.balance>=0?"#059669":"#dc2626"}}>{fmx(tot.balance)}</p>
+                          <p style={{margin:"8px 0 4px",fontSize:10,color:"#94a3b8"}}>Este mes</p>
                           <div style={{display:"flex",justifyContent:"space-between",borderTop:"1px solid #f1f5f9",paddingTop:10}}>
                             <div style={{textAlign:"center"}}><p style={{margin:0,fontSize:12,color:"#94a3b8"}}>Ingresos</p><p style={{margin:0,fontSize:13,color:"#059669",fontWeight:600}}>{fmx(tot.ingresos)}</p></div>
                             <div style={{textAlign:"center"}}><p style={{margin:0,fontSize:12,color:"#94a3b8"}}>Gastos</p><p style={{margin:0,fontSize:13,color:"#dc2626",fontWeight:600}}>{fmx(tot.gastos)}</p></div>
