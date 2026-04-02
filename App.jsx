@@ -374,7 +374,7 @@ export default function App() {
         .filter(t=>filter==="all"||t.type===filter)
         .filter(t=>filterAcc==="all"||t.account_id===filterAcc)
         .filter(t=>!filterCat||t.category===filterCat)
-        .sort((a,b)=>a.date.localeCompare(b.date));
+        .sort((a,b)=>a.date.localeCompare(b.date)); // ascending = closest first
     }
     let list = [...transactions].filter(t=>t.date<=todayStr);
     if(filterPeriod==="7d") list=list.filter(t=>t.date>=from7&&t.date<=todayStr);
@@ -955,7 +955,11 @@ export default function App() {
           <div style={S.logo}><span style={S.logoIcon}>◈</span><span style={S.logoText}>Contabilidad Xhus</span></div>
           <nav style={S.nav}>
             {navItems.map(({v,icon,label})=>(
-              <button key={v} style={{...S.navBtn,...(view===v?S.navBtnActive:{})}} onClick={()=>{setViewPersist(v); if(isMobile) setSidebarOpen(false); setTimeout(()=>window.scrollTo({top:0,behavior:"smooth"}),50); if(v!=="add"){setEditTx(null);setTxForm({date:today(),description:"",category:"",type:"gasto",amount:"",account_id:accounts[0]?.id||"",recurrence:"none",recurrence_end:""}); }}}>
+              <button key={v} style={{...S.navBtn,...(view===v?S.navBtnActive:{})}} onClick={()=>{
+                setViewPersist(v);
+                if(isMobile) setSidebarOpen(false);
+                if(v==="transactions"){setFilterPeriod("30d");setFilterAcc("all");setFilterCat("");setSearch("");setDateFrom("");setDateTo("");setSelectedAccountId(null);}
+                setTimeout(()=>window.scrollTo({top:0,behavior:"smooth"}),50); if(v!=="add"){setEditTx(null);setTxForm({date:today(),description:"",category:"",type:"gasto",amount:"",account_id:accounts[0]?.id||"",recurrence:"none",recurrence_end:""}); }}}>
                 <span style={S.navIcon}>{icon}</span><span>{label}</span>
               </button>
             ))}
