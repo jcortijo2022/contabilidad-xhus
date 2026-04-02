@@ -962,7 +962,6 @@ export default function App() {
           </nav>
           <button style={S.exportSideBtn} onClick={()=>setModal("export")}>⬇ Exportar</button>
           <button style={{...S.exportSideBtn,marginTop:6,color:"#dc2626",borderColor:"#fecaca"}} onClick={handleLogout}>⏻ Cerrar sesión</button>
-          <p style={{fontSize:10,color:"#94a3b8",textAlign:"center",margin:"8px 0 4px"}}>© Jesús Cortijo · Marzo 2026</p>
           <div style={S.sidebalBox}>
             <p style={S.sidebalLabel}>Balance total</p>
             <p style={{...S.sidebalAmt,color:totals.balance>=0?"#059669":"#dc2626"}}>{fmx(totals.balance)}</p>
@@ -971,6 +970,7 @@ export default function App() {
               <span style={{fontSize:12,color:"#dc2626"}}>↓ {fmx(totals.gastos)}</span>
             </div>
           </div>
+          <p style={{fontSize:10,color:"#94a3b8",textAlign:"center",margin:"8px 0 4px"}}>© Jesús Cortijo · Marzo 2026</p>
         </aside>
       )}
 
@@ -1296,9 +1296,12 @@ export default function App() {
               </div>
 
             </div>
-            {/* Search + account + category */}
-            <div style={{display:"flex",gap:8,marginBottom:12,flexWrap:"wrap",alignItems:"center"}}>
+            {/* Search + date + account + category */}
+            <div style={{display:"flex",gap:8,marginBottom:8,flexWrap:"wrap",alignItems:"center"}}>
               <input style={{...S.search,flex:1,minWidth:120}} placeholder="Buscar…" value={search} onChange={e=>setSearch(e.target.value)}/>
+              <input style={{...S.search,width:"auto"}} type="date" value={dateFrom} onChange={e=>setDateFrom(e.target.value)} title="Desde"/>
+              <input style={{...S.search,width:"auto"}} type="date" value={dateTo} onChange={e=>setDateTo(e.target.value)} title="Hasta"/>
+              {(dateFrom||dateTo)&&<button style={{...S.btnCancel,padding:"6px 10px",fontSize:12}} onClick={()=>{setDateFrom("");setDateTo("");}}>✕</button>}
               {!selectedAccountId&&(
                 <select style={{...S.input,flex:1,minWidth:100,padding:"7px 8px",fontSize:12}} value={filterAcc} onChange={e=>setFilterAcc(e.target.value)}>
                   <option value="all">Todas las cuentas</option>
@@ -1453,7 +1456,7 @@ export default function App() {
                 return (
                   <div key={b.id} style={{...S.budgetCard,borderTop:`3px solid ${barColor}`,cursor:"pointer"}} onClick={()=>setBudgetDetail(budgetDetail===b.category?null:b.category)}>
                     <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:10}}>
-                      <div><p style={{margin:0,fontWeight:700,color:"#0f172a",fontSize:15}}>{b.category}</p>{over&&<span style={S.badgeDanger}>⚠ Excedido</span>}{warn&&<span style={S.badgeWarn}>⚡ Cerca</span>}</div>
+                      <div><p style={{margin:0,fontWeight:700,color:"#0f172a",fontSize:15}}>{b.category}</p>{over&&<span style={S.badgeDanger}>⚠ Excedido</span>}{warn&&<span style={S.badgeWarn}>⚡ Queda poco</span>}</div>
                       <div style={{display:"flex",gap:4}}><button style={S.iconBtn} onClick={e=>{e.stopPropagation();startEditBudget(b);}}>✎</button><button style={{...S.iconBtn,...S.iconBtnDel}} onClick={e=>{e.stopPropagation();confirmDeleteBudget(b.id);}}>✕</button></div>
                     </div>
                     <div style={{display:"flex",justifyContent:"space-between",marginBottom:6}}><span style={{fontSize:13,color:"#64748b"}}>Gastado: <b style={{color:over?"#dc2626":"#1e293b"}}>{fmx(b.spent)}</b></span><span style={{fontSize:13,color:"#94a3b8"}}>Límite: {fmx(b.amount)}</span></div>
