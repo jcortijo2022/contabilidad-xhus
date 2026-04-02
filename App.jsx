@@ -1452,12 +1452,12 @@ export default function App() {
                 const barColor=over?"#ef4444":warn?"#f59e0b":"#4f46e5";
                 return (
                   <div key={b.id} style={{...S.budgetCard,borderTop:`3px solid ${barColor}`,cursor:"pointer"}} onClick={()=>setBudgetDetail(budgetDetail===b.category?null:b.category)}>
-                  <div key={b.id} style={{...S.budgetCard,borderTop:`3px solid ${barColor}`,cursor:"pointer"}} onClick={()=>setBudgetDetail(budgetDetail===b.category?null:b.category)}>
                     <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:10}}>
                       <div><p style={{margin:0,fontWeight:700,color:"#0f172a",fontSize:15}}>{b.category}</p>{over&&<span style={S.badgeDanger}>⚠ Excedido</span>}{warn&&<span style={S.badgeWarn}>⚡ Cerca</span>}</div>
                       <div style={{display:"flex",gap:4}}><button style={S.iconBtn} onClick={e=>{e.stopPropagation();startEditBudget(b);}}>✎</button><button style={{...S.iconBtn,...S.iconBtnDel}} onClick={e=>{e.stopPropagation();confirmDeleteBudget(b.id);}}>✕</button></div>
                     </div>
                     <div style={{display:"flex",justifyContent:"space-between",marginBottom:6}}><span style={{fontSize:13,color:"#64748b"}}>Gastado: <b style={{color:over?"#dc2626":"#1e293b"}}>{fmx(b.spent)}</b></span><span style={{fontSize:13,color:"#94a3b8"}}>Límite: {fmx(b.amount)}</span></div>
+                    <div style={S.progTrack}><div style={{...S.progBar,width:`${pct}%`,background:`linear-gradient(90deg,${barColor},${barColor}99)`}}/></div>
                     <div style={{display:"flex",justifyContent:"space-between",marginTop:6}}><span style={{fontSize:12,color:"#94a3b8"}}>{pct.toFixed(0)}% usado</span><span style={{fontSize:12,color:over?"#dc2626":"#059669"}}>{over?`-${fmx(b.spent-b.amount)} excedido`:`${fmx(b.amount-b.spent)} libre`}</span></div>
                   </div>
                 );
