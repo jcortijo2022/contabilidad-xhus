@@ -1296,12 +1296,19 @@ export default function App() {
               </div>
 
             </div>
-            {/* Search + date + account + category */}
+            {/* Search + account + category */}
             <div style={{display:"flex",gap:8,marginBottom:8,flexWrap:"wrap",alignItems:"center"}}>
-              <input style={{...S.search,flex:1,minWidth:120}} placeholder="Buscar…" value={search} onChange={e=>setSearch(e.target.value)}/>
-              <input style={{...S.search,width:"auto"}} type="date" value={dateFrom} onChange={e=>setDateFrom(e.target.value)} title="Desde"/>
-              <input style={{...S.search,width:"auto"}} type="date" value={dateTo} onChange={e=>setDateTo(e.target.value)} title="Hasta"/>
-              {(dateFrom||dateTo)&&<button style={{...S.btnCancel,padding:"6px 10px",fontSize:12}} onClick={()=>{setDateFrom("");setDateTo("");}}>✕</button>}
+              <input style={{...S.search,flex:2,minWidth:120}} placeholder="Buscar…" value={search} onChange={e=>setSearch(e.target.value)}/>
+              {!selectedAccountId&&(
+                <select style={{...S.input,flex:1,minWidth:100,padding:"7px 8px",fontSize:12}} value={filterAcc} onChange={e=>setFilterAcc(e.target.value)}>
+                  <option value="all">Todas las cuentas</option>
+                  {accounts.map(a=><option key={a.id} value={a.id}>{a.name}</option>)}
+                </select>
+              )}
+              <select style={{...S.input,flex:1,minWidth:100,padding:"7px 8px",fontSize:12}} value={filterCat} onChange={e=>setFilterCat(e.target.value)}>
+                <option value="">Todas categorías</option>
+                {[...new Set([...CATEGORIES.ingreso,...CATEGORIES.gasto])].sort().map(c=><option key={c} value={c}>{c}</option>)}
+              </select>
               {!selectedAccountId&&(
                 <select style={{...S.input,flex:1,minWidth:100,padding:"7px 8px",fontSize:12}} value={filterAcc} onChange={e=>setFilterAcc(e.target.value)}>
                   <option value="all">Todas las cuentas</option>
@@ -1314,6 +1321,11 @@ export default function App() {
               </select>
             </div>
 
+            <div style={{display:"flex",gap:8,marginBottom:12,flexWrap:"wrap",alignItems:"center"}}>
+              <input style={{...S.search,width:"auto"}} type="date" value={dateFrom} onChange={e=>setDateFrom(e.target.value)} title="Desde"/>
+              <input style={{...S.search,width:"auto"}} type="date" value={dateTo} onChange={e=>setDateTo(e.target.value)} title="Hasta"/>
+              {(dateFrom||dateTo)&&<button style={{...S.btnCancel,padding:"6px 10px",fontSize:12}} onClick={()=>{setDateFrom("");setDateTo("");}}>✕ Limpiar</button>}
+            </div>
             <div style={S.card}>
               {txWithBalance.length===0&&<p style={S.empty}>No se encontraron movimientos</p>}
               {txWithBalance.map(t=><TxRow key={t.id} t={t} accounts={accounts} onEdit={startEditTx} onDelete={confirmDeleteTx} showBalance={true}/>)}
