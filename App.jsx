@@ -545,7 +545,25 @@ export default function App() {
   };
 
   // ── Recurrent CRUD ────────────────────────────────────────────────────────
-  const deleteRecurrent = async id=>{await supabase.from("recurrents").delete().eq("id",id); await loadRecurrents(); showToast("Recurrente eliminado","#f59e0b");};
+  const deleteRecurrent = async id=>{
+    // Find and delete future transactions for this recurrent
+    const rec = recurrents.find(r=>r.id===id);
+    if(rec) {
+      const todayStr = today();
+      const futureTxs = transactions.filter(t=>
+        t.description===rec.description &&
+        t.account_id===rec.account_id &&
+        t.date>todayStr
+      );
+      if(futureTxs.length>0) {
+        const futureIds = futureTxs.map(t=>t.id);
+        await supabase.from("transactions").delete().in("id",futureIds);
+      }
+    }
+    await supabase.from("recurrents").delete().eq("id",id);
+    await loadRecurrents(); await loadTransactions();
+    showToast("Recurrente eliminado","#f59e0b");
+  };
   const startEditRec = r=>{setRecForm({amount:String(r.amount),type:r.type||"gasto",category:r.category||"",account_id:r.account_id||"",next_date:r.next_date||""}); setEditRec(r.id); setModal("editRec");};
   const saveRecAmount = async()=>{
     const amt=parseFloat(recForm.amount);
@@ -556,13 +574,30 @@ export default function App() {
     if(recForm.account_id) payload.account_id=recForm.account_id;
     if(recForm.next_date) payload.next_date=recForm.next_date;
     await supabase.from("recurrents").update(payload).eq("id",editRec);
-    // Update future generated transactions if date changed
-    if(recForm.next_date) {
-      const rec = recurrents.find(r=>r.id===editRec);
-      if(rec) {
-        const todayStr = today();
-        const futureIds = transactions.filter(t=>t.description===rec.description&&t.account_id===rec.account_id&&t.date>todayStr).map(t=>t.id);
-        if(futureIds.length>0) await supabase.from("transactions").delete().in("id",futureIds);
+    // Update future generated transactions with new data
+    const rec = recurrents.find(r=>r.id===editRec);
+    if(rec) {
+      const todayStr = today();
+      const futureTxs = transactions.filter(t=>
+        t.description===rec.description &&
+        t.account_id===rec.account_id &&
+        t.date>todayStr
+      );
+      if(futureTxs.length>0) {
+        const updatePayload = {};
+        if(recForm.amount) updatePayload.amount = amt;
+        if(recForm.type) updatePayload.type = recForm.type;
+        if(recForm.category) updatePayload.category = recForm.category;
+        if(recForm.account_id) updatePayload.account_id = recForm.account_id;
+        // If date changed, delete old future and let autoGenerate recreate them
+        if(recForm.next_date && recForm.next_date !== rec.next_date) {
+          const futureIds = futureTxs.map(t=>t.id);
+          await supabase.from("transactions").delete().in("id",futureIds);
+        } else if(Object.keys(updatePayload).length>0) {
+          for(const tx of futureTxs) {
+            await supabase.from("transactions").update(updatePayload).eq("id",tx.id);
+          }
+        }
       }
     }
     await loadRecurrents(); await loadTransactions();
@@ -1780,4 +1815,3 @@ const styles = {
   badgeWarn:{display:"inline-block",background:"#fffbeb",color:"#d97706",fontSize:12,padding:"2px 7px",borderRadius:5,fontWeight:600,marginTop:2},
   linkBtn:{background:"none",border:"none",color:"#4f46e5",cursor:"pointer",fontSize:13},
 };
-
