@@ -1309,21 +1309,13 @@ export default function App() {
                 <option value="">Todas categorías</option>
                 {[...new Set([...CATEGORIES.ingreso,...CATEGORIES.gasto])].sort().map(c=><option key={c} value={c}>{c}</option>)}
               </select>
-              {!selectedAccountId&&(
-                <select style={{...S.input,flex:1,minWidth:100,padding:"7px 8px",fontSize:12}} value={filterAcc} onChange={e=>setFilterAcc(e.target.value)}>
-                  <option value="all">Todas las cuentas</option>
-                  {accounts.map(a=><option key={a.id} value={a.id}>{a.name}</option>)}
-                </select>
-              )}
-              <select style={{...S.input,flex:1,minWidth:100,padding:"7px 8px",fontSize:12}} value={filterCat} onChange={e=>setFilterCat(e.target.value)}>
-                <option value="">Todas categorías</option>
-                {[...new Set([...CATEGORIES.ingreso,...CATEGORIES.gasto])].sort().map(c=><option key={c} value={c}>{c}</option>)}
-              </select>
             </div>
 
             <div style={{display:"flex",gap:8,marginBottom:12,flexWrap:"wrap",alignItems:"center"}}>
-              <input style={{...S.search,width:"auto"}} type="date" value={dateFrom} onChange={e=>setDateFrom(e.target.value)} title="Desde"/>
-              <input style={{...S.search,width:"auto"}} type="date" value={dateTo} onChange={e=>setDateTo(e.target.value)} title="Hasta"/>
+              <label style={{fontSize:12,color:"#64748b",fontWeight:600,whiteSpace:"nowrap"}}>Desde</label>
+              <input style={{...S.search,width:"auto"}} type="date" value={dateFrom} onChange={e=>setDateFrom(e.target.value)}/>
+              <label style={{fontSize:12,color:"#64748b",fontWeight:600,whiteSpace:"nowrap"}}>Hasta</label>
+              <input style={{...S.search,width:"auto"}} type="date" value={dateTo} onChange={e=>setDateTo(e.target.value)}/>
               {(dateFrom||dateTo)&&<button style={{...S.btnCancel,padding:"6px 10px",fontSize:12}} onClick={()=>{setDateFrom("");setDateTo("");}}>✕ Limpiar</button>}
             </div>
             <div style={S.card}>
