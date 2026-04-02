@@ -405,6 +405,7 @@ export default function App() {
       allTx.forEach(t=>{ if(accBals[t.account_id]===undefined) accBals[t.account_id]=0; accBals[t.account_id]+=t.type==="ingreso"?t.amount:-t.amount; balanceMap[t.id]=accBals[t.account_id]; });
     }
     const list = [...filteredTx].sort((a,b)=>a.date.localeCompare(b.date)||(a.created_at||"").localeCompare(b.created_at||""));
+    if(filterPeriod==="upcoming") return list.map(t=>({...t,runningBalance:null}));
     return list.map(t=>({...t,runningBalance:balanceMap[t.id]??null})).reverse();
   },[filteredTx,selectedAccountId,accounts,transactions]);
 
@@ -1779,3 +1780,4 @@ const styles = {
   badgeWarn:{display:"inline-block",background:"#fffbeb",color:"#d97706",fontSize:12,padding:"2px 7px",borderRadius:5,fontWeight:600,marginTop:2},
   linkBtn:{background:"none",border:"none",color:"#4f46e5",cursor:"pointer",fontSize:13},
 };
+
