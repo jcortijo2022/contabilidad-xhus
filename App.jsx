@@ -234,7 +234,9 @@ export default function App() {
   const [loginForm, setLoginForm] = useState({ email:"", password:"", name:"" });
   const [loginError, setLoginError] = useState("");
   const [loginLoading, setLoginLoading] = useState(false);
-  const [loginMode, setLoginMode] = useState("login"); // login | register | confirm
+  const [loginMode, setLoginMode] = useState("login");
+  const [biometricLocked, setBiometricLocked] = useState(false);
+  const [biometricError, setBiometricError] = useState(""); // login | register | confirm
   const [transactions, setTransactions] = useState([]);
   const [accounts, setAccounts] = useState([]);
   const [budgets, setBudgets] = useState([]);
@@ -291,6 +293,34 @@ export default function App() {
     Notification.requestPermission().then(p=>{ if(p==="granted") showToast("Notificaciones activadas ✓","#059669"); else showToast("Permiso denegado","#ef4444"); });
   };
 
+  const unlockWithBiometric = async () => {
+    setBiometricError("");
+    try {
+      const challenge = new Uint8Array(32);
+      crypto.getRandomValues(challenge);
+      await navigator.credentials.get({
+        publicKey: {
+          challenge,
+          timeout: 60000,
+          userVerification: "required",
+          rpId: window.location.hostname,
+        }
+      });
+      setBiometricLocked(false);
+      loadAll();
+    } catch(e) {
+      if(e.name === "NotAllowedError") {
+        setBiometricError("Huella no reconocida. Inténtalo de nuevo.");
+      } else if(e.name === "NotSupportedError" || e.name === "InvalidStateError") {
+        // No biometric registered, skip lock
+        setBiometricLocked(false);
+        loadAll();
+      } else {
+        setBiometricError("Error al verificar huella. Inténtalo de nuevo.");
+      }
+    }
+  };
+
   const handleLogin = async () => {
     setLoginError(""); setLoginLoading(true);
     const { error } = await supabase.auth.signInWithPassword({ email:loginForm.email, password:loginForm.password });
@@ -318,7 +348,19 @@ export default function App() {
   };
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => { setUser(session?.user??null); setAuthLoading(false); if(session?.user) loadAll(); });
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setUser(session?.user??null);
+      setAuthLoading(false);
+      if(session?.user) {
+        // Require biometric on mobile if supported
+        const isMob = window.innerWidth < 768;
+        if(isMob && window.PublicKeyCredential) {
+          setBiometricLocked(true);
+        } else {
+          loadAll();
+        }
+      }
+    });
     supabase.auth.onAuthStateChange((_e,session) => { setUser(session?.user??null); if(session?.user) loadAll(); });
   }, []);
 
@@ -766,6 +808,23 @@ export default function App() {
           </div>
         </>}
         <p style={{textAlign:"center",fontSize:12,color:"#94a3b8",marginTop:20}}>🔒 Tus datos están cifrados y son privados</p>
+      </div>
+    </div>
+  );
+
+  if(biometricLocked) return (
+    <div style={{display:"flex",minHeight:"100vh",background:"#f8fafc",alignItems:"center",justifyContent:"center",fontFamily:"'DM Sans','Segoe UI',sans-serif"}}>
+      <div style={{background:"#fff",borderRadius:20,padding:"40px 32px",width:"100%",maxWidth:340,boxShadow:"0 8px 40px rgba(0,0,0,.10)",border:"1px solid #e2e8f0",textAlign:"center"}}>
+        <span style={{fontSize:48}}>🔐</span>
+        <h1 style={{margin:"16px 0 8px",fontSize:20,fontWeight:700,color:"#0f172a"}}>Contabilidad Xhus</h1>
+        <p style={{margin:"0 0 24px",fontSize:14,color:"#64748b"}}>Verifica tu identidad para continuar</p>
+        {biometricError && <p style={{color:"#dc2626",fontSize:13,margin:"0 0 16px",fontWeight:500}}>⚠ {biometricError}</p>}
+        <button style={{width:"100%",background:"#4f46e5",color:"#fff",border:"none",borderRadius:12,padding:"14px",fontWeight:700,cursor:"pointer",fontSize:16,marginBottom:12}} onClick={unlockWithBiometric}>
+          👆 Usar huella digital
+        </button>
+        <button style={{width:"100%",background:"transparent",color:"#94a3b8",border:"none",cursor:"pointer",fontSize:13,padding:"8px"}} onClick={()=>{setBiometricLocked(false);loadAll();}}>
+          Omitir
+        </button>
       </div>
     </div>
   );
