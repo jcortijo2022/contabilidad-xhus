@@ -298,47 +298,31 @@ export default function App() {
   const unlockWithBiometric = async () => {
     setBiometricError("");
     try {
-      // Use Android lock screen (fingerprint/PIN/pattern)
-      await navigator.credentials.get({
-        mediation: "optional",
-        password: true,
+      const challenge = new Uint8Array(32);
+      crypto.getRandomValues(challenge);
+      const userId = new Uint8Array(16);
+      crypto.getRandomValues(userId);
+      const credential = await navigator.credentials.create({
+        publicKey: {
+          challenge,
+          rp: { name: "Contabilidad Xhus", id: window.location.hostname },
+          user: { id: userId, name: "usuario", displayName: "Usuario Xhus" },
+          pubKeyCredParams: [{ type: "public-key", alg: -7 }],
+          authenticatorSelection: {
+            authenticatorAttachment: "platform",
+            userVerification: "required",
+            residentKey: "preferred",
+          },
+          timeout: 60000,
+        }
       });
-      setBiometricLocked(false);
-      loadAll();
-    } catch(e1) {
-      try {
-        // Fallback: create a temporary passkey for this device
-        const challenge = new Uint8Array(32);
-        crypto.getRandomValues(challenge);
-        const userId = new Uint8Array(16);
-        crypto.getRandomValues(userId);
-        // Try to create a new passkey on the device
-        const credential = await navigator.credentials.create({
-          publicKey: {
-            challenge,
-            rp: { name: "Contabilidad Xhus", id: window.location.hostname },
-            user: { id: userId, name: "usuario", displayName: "Usuario Xhus" },
-            pubKeyCredParams: [{ type: "public-key", alg: -7 }],
-            authenticatorSelection: {
-              authenticatorAttachment: "platform",
-              userVerification: "required",
-              residentKey: "required",
-            },
-            timeout: 60000,
-          }
-        });
-        if(credential) {
-          setBiometricLocked(false);
-          loadAll();
-        }
-      } catch(e2) {
-        if(e2.name === "NotAllowedError") {
-          setBiometricError("Verificación cancelada. Inténtalo de nuevo.");
-        } else {
-          // Device doesn't support biometrics, skip
-          setBiometricLocked(false);
-          loadAll();
-        }
+      if(credential) { setBiometricLocked(false); loadAll(); }
+    } catch(e) {
+      if(e.name === "NotAllowedError") {
+        setBiometricError("Verificación cancelada. Inténtalo de nuevo.");
+      } else {
+        setBiometricLocked(false);
+        loadAll();
       }
     }
   };
@@ -845,6 +829,9 @@ export default function App() {
         {biometricError && <p style={{color:"#dc2626",fontSize:13,margin:"0 0 16px",fontWeight:500,background:"#fef2f2",padding:"8px 12px",borderRadius:8}}>⚠ {biometricError}</p>}
         <button style={{width:"100%",background:"#4f46e5",color:"#fff",border:"none",borderRadius:14,padding:"16px",fontWeight:700,cursor:"pointer",fontSize:16,marginBottom:12,boxShadow:"0 4px 12px rgba(79,70,229,.3)"}} onClick={unlockWithBiometric}>
           👆 Verificar huella
+        </button>
+        <button style={{width:"100%",background:"#f8fafc",color:"#64748b",border:"1px solid #e2e8f0",borderRadius:14,padding:"12px",fontWeight:600,cursor:"pointer",fontSize:14,marginBottom:12}} onClick={()=>{setBiometricLocked(false);loadAll();}}>
+          Entrar con contraseña
         </button>
         <p style={{fontSize:11,color:"#94a3b8",margin:0}}>🔒 Tus datos están protegidos</p>
       </div>
