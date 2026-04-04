@@ -3,7 +3,7 @@ import { createClient } from "@supabase/supabase-js";
 
 const SUPABASE_URL = "https://adnyrevdvdndffesaszc.supabase.co";
 const SUPABASE_KEY = "sb_publishable_GsfPHYgw6xMjM3LISfz4Gg_KuEvwP_x";
-const supabase = createClient(SUPABASE_URL, SUPABASE_KEY, { auth: { persistSession: false, autoRefreshToken: false } });
+const supabase = createClient(SUPABASE_URL, SUPABASE_KEY, { auth: { persistSession: true, autoRefreshToken: false } });
 
 function useWindowSize() {
   const [size, setSize] = useState({ w: window.innerWidth });
@@ -360,13 +360,12 @@ export default function App() {
       setAuthLoading(false);
       if(session?.user) {
         const isStandalone = window.matchMedia('(display-mode: standalone)').matches;
-        if(isStandalone && window.PublicKeyCredential) {
-          PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable().then(available => {
-            if(available) setBiometricLocked(true);
-            else loadAll();
-          }).catch(()=>loadAll());
+        if(isStandalone) {
+          // In APK: always require biometric
+          setBiometricLocked(true);
         } else {
-          loadAll();
+          // In web: sign out so password is always required
+          supabase.auth.signOut().then(()=>{ setUser(null); });
         }
       }
     });
