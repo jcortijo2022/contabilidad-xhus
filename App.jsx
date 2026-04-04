@@ -316,7 +316,14 @@ export default function App() {
           timeout: 60000,
         }
       });
-      if(credential) { setBiometricLocked(false); loadAll(); }
+      if(credential) {
+        setBiometricLocked(false);
+        // Restore session
+        supabase.auth.getSession().then(({data:{session}})=>{
+          if(session?.user) { setUser(session.user); loadAll(); }
+          else { localStorage.removeItem('xhus_has_session'); }
+        });
+      }
     } catch(e) {
       if(e.name === "NotAllowedError") {
         setBiometricError("Verificación cancelada. Inténtalo de nuevo.");
@@ -331,7 +338,12 @@ export default function App() {
     setLoginError(""); setLoginLoading(true);
     const { error } = await supabase.auth.signInWithPassword({ email:loginForm.email, password:loginForm.password });
     if(error) { setLoginError("Email o contraseña incorrectos"); }
-    else { setLoginForm({email:"",password:"",name:""}); }
+    else {
+      setLoginForm({email:"",password:"",name:""});
+      // Save flag for biometric on next open
+      const isStandalone = window.matchMedia('(display-mode: standalone)').matches;
+      if(isStandalone) localStorage.setItem('xhus_has_session','1');
+    }
     setLoginLoading(false);
   };
   const handleRegister = async () => {
@@ -350,21 +362,27 @@ export default function App() {
 
   const handleLogout = async () => {
     await supabase.auth.signOut();
+    // Keep xhus_has_session so biometric shows on next open
     setUser(null); setTransactions([]); setAccounts([]); setBudgets([]); setRecurrents([]); setMonthlyLimit(null); setStocks([]); setDebts([]); setProperties([]);
     sessionStorage.removeItem("xhus_view");
   };
 
   useEffect(() => {
+    const isStandalone = window.matchMedia('(display-mode: standalone)').matches;
+    const hasSession = localStorage.getItem('xhus_has_session');
+    if(isStandalone && hasSession) {
+      // APK with previous session: show biometric
+      setAuthLoading(false);
+      setBiometricLocked(true);
+      return;
+    }
     supabase.auth.getSession().then(({ data: { session } }) => {
       setUser(session?.user??null);
       setAuthLoading(false);
       if(session?.user) {
-        const isStandalone = window.matchMedia('(display-mode: standalone)').matches;
         if(isStandalone) {
-          // In APK: always require biometric
           setBiometricLocked(true);
         } else {
-          // In web: sign out so password is always required
           supabase.auth.signOut().then(()=>{ setUser(null); });
         }
       }
@@ -830,7 +848,12 @@ export default function App() {
         <button style={{width:"100%",background:"#4f46e5",color:"#fff",border:"none",borderRadius:14,padding:"16px",fontWeight:700,cursor:"pointer",fontSize:16,marginBottom:12,boxShadow:"0 4px 12px rgba(79,70,229,.3)"}} onClick={unlockWithBiometric}>
           👆 Verificar huella
         </button>
-        <button style={{width:"100%",background:"#f8fafc",color:"#64748b",border:"1px solid #e2e8f0",borderRadius:14,padding:"12px",fontWeight:600,cursor:"pointer",fontSize:14,marginBottom:12}} onClick={()=>{setBiometricLocked(false);loadAll();}}>
+        <button style={{width:"100%",background:"#f8fafc",color:"#64748b",border:"1px solid #e2e8f0",borderRadius:14,padding:"12px",fontWeight:600,cursor:"pointer",fontSize:14,marginBottom:12}} onClick={()=>{
+          setBiometricLocked(false);
+          supabase.auth.getSession().then(({data:{session}})=>{
+            if(session?.user){setUser(session.user);loadAll();}
+          });
+        }}>
           Entrar con contraseña
         </button>
         <p style={{fontSize:11,color:"#94a3b8",margin:0}}>🔒 Tus datos están protegidos</p>
