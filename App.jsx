@@ -236,7 +236,9 @@ export default function App() {
   const [loginLoading, setLoginLoading] = useState(false);
   const [loginMode, setLoginMode] = useState("login");
   const [biometricLocked, setBiometricLocked] = useState(false);
-  const [biometricError, setBiometricError] = useState(""); // login | register | confirm
+  const [biometricError, setBiometricError] = useState("");
+  const isTWA = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
+ // login | register | confirm
   const [transactions, setTransactions] = useState([]);
   const [accounts, setAccounts] = useState([]);
   const [budgets, setBudgets] = useState([]);
@@ -304,19 +306,19 @@ export default function App() {
           timeout: 60000,
           userVerification: "required",
           rpId: window.location.hostname,
+          allowCredentials: [],
         }
       });
       setBiometricLocked(false);
       loadAll();
     } catch(e) {
       if(e.name === "NotAllowedError") {
-        setBiometricError("Huella no reconocida. Inténtalo de nuevo.");
-      } else if(e.name === "NotSupportedError" || e.name === "InvalidStateError") {
-        // No biometric registered, skip lock
+        setBiometricError("Verificación cancelada. Inténtalo de nuevo.");
+      } else if(e.name === "NotSupportedError" || e.name === "InvalidStateError" || e.name === "SecurityError") {
         setBiometricLocked(false);
         loadAll();
       } else {
-        setBiometricError("Error al verificar huella. Inténtalo de nuevo.");
+        setBiometricError("Error: " + e.message);
       }
     }
   };
@@ -352,10 +354,12 @@ export default function App() {
       setUser(session?.user??null);
       setAuthLoading(false);
       if(session?.user) {
-        // Require biometric on mobile if supported
-        const isMob = window.innerWidth < 768;
-        if(isMob && window.PublicKeyCredential) {
-          setBiometricLocked(true);
+        const isStandalone = window.matchMedia('(display-mode: standalone)').matches;
+        if(isStandalone && window.PublicKeyCredential) {
+          PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable().then(available => {
+            if(available) setBiometricLocked(true);
+            else loadAll();
+          }).catch(()=>loadAll());
         } else {
           loadAll();
         }
@@ -813,18 +817,16 @@ export default function App() {
   );
 
   if(biometricLocked) return (
-    <div style={{display:"flex",minHeight:"100vh",background:"#f8fafc",alignItems:"center",justifyContent:"center",fontFamily:"'DM Sans','Segoe UI',sans-serif"}}>
-      <div style={{background:"#fff",borderRadius:20,padding:"40px 32px",width:"100%",maxWidth:340,boxShadow:"0 8px 40px rgba(0,0,0,.10)",border:"1px solid #e2e8f0",textAlign:"center"}}>
-        <span style={{fontSize:48}}>🔐</span>
-        <h1 style={{margin:"16px 0 8px",fontSize:20,fontWeight:700,color:"#0f172a"}}>Contabilidad Xhus</h1>
-        <p style={{margin:"0 0 24px",fontSize:14,color:"#64748b"}}>Verifica tu identidad para continuar</p>
-        {biometricError && <p style={{color:"#dc2626",fontSize:13,margin:"0 0 16px",fontWeight:500}}>⚠ {biometricError}</p>}
-        <button style={{width:"100%",background:"#4f46e5",color:"#fff",border:"none",borderRadius:12,padding:"14px",fontWeight:700,cursor:"pointer",fontSize:16,marginBottom:12}} onClick={unlockWithBiometric}>
-          👆 Usar huella digital
+    <div style={{display:"flex",minHeight:"100vh",background:"linear-gradient(135deg,#eef2ff,#e0e7ff)",alignItems:"center",justifyContent:"center",fontFamily:"'DM Sans','Segoe UI',sans-serif"}}>
+      <div style={{background:"#fff",borderRadius:24,padding:"48px 32px",width:"100%",maxWidth:320,boxShadow:"0 8px 40px rgba(79,70,229,.15)",border:"1px solid #e2e8f0",textAlign:"center"}}>
+        <div style={{fontSize:56,marginBottom:16}}>🔐</div>
+        <h1 style={{margin:"0 0 8px",fontSize:22,fontWeight:700,color:"#0f172a"}}>Contabilidad Xhus</h1>
+        <p style={{margin:"0 0 28px",fontSize:14,color:"#64748b"}}>Usa tu huella digital para acceder</p>
+        {biometricError && <p style={{color:"#dc2626",fontSize:13,margin:"0 0 16px",fontWeight:500,background:"#fef2f2",padding:"8px 12px",borderRadius:8}}>⚠ {biometricError}</p>}
+        <button style={{width:"100%",background:"#4f46e5",color:"#fff",border:"none",borderRadius:14,padding:"16px",fontWeight:700,cursor:"pointer",fontSize:16,marginBottom:12,boxShadow:"0 4px 12px rgba(79,70,229,.3)"}} onClick={unlockWithBiometric}>
+          👆 Verificar huella
         </button>
-        <button style={{width:"100%",background:"transparent",color:"#94a3b8",border:"none",cursor:"pointer",fontSize:13,padding:"8px"}} onClick={()=>{setBiometricLocked(false);loadAll();}}>
-          Omitir
-        </button>
+        <p style={{fontSize:11,color:"#94a3b8",margin:0}}>🔒 Tus datos están protegidos</p>
       </div>
     </div>
   );
