@@ -3,7 +3,7 @@ import { createClient } from "@supabase/supabase-js";
 
 const SUPABASE_URL = "https://adnyrevdvdndffesaszc.supabase.co";
 const SUPABASE_KEY = "sb_publishable_GsfPHYgw6xMjM3LISfz4Gg_KuEvwP_x";
-const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
+const supabase = createClient(SUPABASE_URL, SUPABASE_KEY, { auth: { persistSession: false, autoRefreshToken: false } });
 
 function useWindowSize() {
   const [size, setSize] = useState({ w: window.innerWidth });
@@ -330,7 +330,8 @@ export default function App() {
   const handleLogin = async () => {
     setLoginError(""); setLoginLoading(true);
     const { error } = await supabase.auth.signInWithPassword({ email:loginForm.email, password:loginForm.password });
-    if(error) setLoginError("Email o contraseña incorrectos");
+    if(error) { setLoginError("Email o contraseña incorrectos"); }
+    else { setLoginForm({email:"",password:"",name:""}); }
     setLoginLoading(false);
   };
   const handleRegister = async () => {
@@ -801,9 +802,9 @@ export default function App() {
             <input style={{width:"100%",background:"#f8fafc",border:"1px solid #e2e8f0",color:"#1e293b",borderRadius:10,padding:"11px 13px",fontSize:15,outline:"none",boxSizing:"border-box",marginBottom:14}} type="text" placeholder="Tu nombre" value={loginForm.name} onChange={e=>setLoginForm(f=>({...f,name:e.target.value}))}/>
           </>}
           <label style={{display:"block",fontSize:12,color:"#64748b",textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:5}}>Email</label>
-          <input style={{width:"100%",background:"#f8fafc",border:"1px solid #e2e8f0",color:"#1e293b",borderRadius:10,padding:"11px 13px",fontSize:15,outline:"none",boxSizing:"border-box",marginBottom:14}} type="email" placeholder="tu@email.com" value={loginForm.email} onChange={e=>setLoginForm(f=>({...f,email:e.target.value}))} onKeyDown={e=>e.key==="Enter"&&(loginMode==="login"?handleLogin():handleRegister())}/>
+          <input style={{width:"100%",background:"#f8fafc",border:"1px solid #e2e8f0",color:"#1e293b",borderRadius:10,padding:"11px 13px",fontSize:15,outline:"none",boxSizing:"border-box",marginBottom:14}} type="email" placeholder="tu@email.com" value={loginForm.email} onChange={e=>setLoginForm(f=>({...f,email:e.target.value}))} onKeyDown={e=>e.key==="Enter"&&(loginMode==="login"?handleLogin():handleRegister())} autoComplete="off" autoCorrect="off"/>
           <label style={{display:"block",fontSize:12,color:"#64748b",textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:5}}>Contraseña</label>
-          <input style={{width:"100%",background:"#f8fafc",border:"1px solid #e2e8f0",color:"#1e293b",borderRadius:10,padding:"11px 13px",fontSize:15,outline:"none",boxSizing:"border-box",marginBottom:6}} type="password" placeholder="••••••••" value={loginForm.password} onChange={e=>setLoginForm(f=>({...f,password:e.target.value}))} onKeyDown={e=>e.key==="Enter"&&(loginMode==="login"?handleLogin():handleRegister())}/>
+          <input style={{width:"100%",background:"#f8fafc",border:"1px solid #e2e8f0",color:"#1e293b",borderRadius:10,padding:"11px 13px",fontSize:15,outline:"none",boxSizing:"border-box",marginBottom:6}} type="password" placeholder="••••••••" value={loginForm.password} onChange={e=>setLoginForm(f=>({...f,password:e.target.value}))} onKeyDown={e=>e.key==="Enter"&&(loginMode==="login"?handleLogin():handleRegister())} autoComplete="new-password"/>
           {loginError && <p style={{color:"#dc2626",fontSize:13,margin:"4px 0 8px",fontWeight:500}}>⚠ {loginError}</p>}
           <button style={{width:"100%",background:"#4f46e5",color:"#fff",border:"none",borderRadius:10,padding:"12px",fontWeight:700,cursor:"pointer",fontSize:16,marginTop:10,opacity:loginLoading?0.7:1}} onClick={loginMode==="login"?handleLogin:handleRegister} disabled={loginLoading}>
             {loginLoading?(loginMode==="login"?"Entrando…":"Registrando…"):(loginMode==="login"?"Entrar":"Crear cuenta")}
