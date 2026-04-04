@@ -346,6 +346,17 @@ export default function App() {
     }
     setLoginLoading(false);
   };
+  const handleResetPassword = async () => {
+    setLoginError(""); setLoginLoading(true);
+    if(!loginForm.email) { setLoginError("Introduce tu email"); setLoginLoading(false); return; }
+    const { error } = await supabase.auth.resetPasswordForEmail(loginForm.email, {
+      redirectTo: window.location.origin,
+    });
+    if(error) { setLoginError(error.message); }
+    else { setLoginMode("resetSent"); }
+    setLoginLoading(false);
+  };
+
   const handleRegister = async () => {
     setLoginError(""); setLoginLoading(true);
     if(!loginForm.name) { setLoginError("Introduce tu nombre"); setLoginLoading(false); return; }
@@ -827,12 +838,15 @@ export default function App() {
             {loginLoading?(loginMode==="login"?"Entrando…":"Registrando…"):(loginMode==="login"?"Entrar":"Crear cuenta")}
           </button>
           <div style={{textAlign:"center",marginTop:16}}>
-            {loginMode==="login"
-              ? <p style={{fontSize:14,color:"#64748b",margin:0}}>¿No tienes cuenta? <button style={{background:"none",border:"none",color:"#4f46e5",cursor:"pointer",fontSize:14,fontWeight:600,padding:0}} onClick={()=>{setLoginMode("register");setLoginError("");}}>Regístrate</button></p>
-              : <p style={{fontSize:14,color:"#64748b",margin:0}}>¿Ya tienes cuenta? <button style={{background:"none",border:"none",color:"#4f46e5",cursor:"pointer",fontSize:14,fontWeight:600,padding:0}} onClick={()=>{setLoginMode("login");setLoginError("");}}>Inicia sesión</button></p>
+            {loginMode==="login" && <>
+              <p style={{fontSize:13,color:"#64748b",margin:"0 0 8px"}}>¿No tienes cuenta? <button style={{background:"none",border:"none",color:"#4f46e5",cursor:"pointer",fontSize:13,fontWeight:600,padding:0}} onClick={()=>{setLoginMode("register");setLoginError("");}}>Regístrate</button></p>
+              <p style={{fontSize:13,color:"#64748b",margin:0}}>¿Olvidaste la contraseña? <button style={{background:"none",border:"none",color:"#4f46e5",cursor:"pointer",fontSize:13,fontWeight:600,padding:0}} onClick={()=>{setLoginMode("reset");setLoginError("");}}>Recuperar</button></p>
+            </>
             }
+            {loginMode==="register" && (
+              <p style={{fontSize:13,color:"#64748b",margin:0}}>¿Ya tienes cuenta? <button style={{background:"none",border:"none",color:"#4f46e5",cursor:"pointer",fontSize:13,fontWeight:600,padding:0}} onClick={()=>{setLoginMode("login");setLoginError("");}}>Inicia sesión</button></p>
+            )}
           </div>
-        </>}
         <p style={{textAlign:"center",fontSize:12,color:"#94a3b8",marginTop:20}}>🔒 Tus datos están cifrados y son privados</p>
       </div>
     </div>
