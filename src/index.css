@@ -1,0 +1,21 @@
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+body { background: #f8fafc; }
+
+.app-root { display: flex; min-height: 100vh; }
+
+.app-main { flex: 1; overflow-y: auto; min-width: 0; }
+
+@media (max-width: 767px) {
+  .kpi-row { grid-template-columns: repeat(2, 1fr) !important; }
+  .two-col { grid-template-columns: 1fr !important; }
+  .page { padding: 48px 14px 20px !important; }
+  .page-header { flex-wrap: wrap; }
+  .filter-row { flex-wrap: wrap; }
+}
+
+@media (orientation: landscape) and (max-height: 500px) {
+  .page { padding: 48px 20px 20px !important; }
+  .kpi-row { grid-template-columns: repeat(4, 1fr) !important; }
+  .two-col { grid-template-columns: 1fr 1fr !important; }
+}

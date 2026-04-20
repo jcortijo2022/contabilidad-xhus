@@ -1,0 +1,1361 @@
+import { useState, useMemo, useEffect } from "react";
+import { createClient } from "@supabase/supabase-js";
+
+const SUPABASE_URL = "https://adnyrevdvdndffesaszc.supabase.co";
+const SUPABASE_KEY = "sb_publishable_GsfPHYgw6xMjM3LISfz4Gg_KuEvwP_x";
+const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
+
+// ─── RESPONSIVE HOOK ──────────────────────────────────────────────────────────
+function useWindowSize() {
+  const [size, setSize] = useState({ w: window.innerWidth });
+  useEffect(() => {
+    const h = () => setSize({ w: window.innerWidth });
+    window.addEventListener("resize", h);
+    window.addEventListener("orientationchange", h);
+    return () => { window.removeEventListener("resize", h); window.removeEventListener("orientationchange", h); };
+  }, []);
+  return size;
+}
+
+// ─── CONSTANTS ────────────────────────────────────────────────────────────────
+const CATEGORIES = {
+  ingreso: ["Salario","Freelance","Inversiones","Ventas","Transferencia","Otro ingreso"],
+  gasto: ["Alimentación","Transporte","Vivienda","Salud","Entretenimiento","Ropa","Educación","Servicios","Tecnología","Otro gasto"],
+};
+const MONTHS = ["Ene","Feb","Mar","Abr","May","Jun","Jul","Ago","Sep","Oct","Nov","Dic"];
+const ACCOUNT_COLORS = ["#4f46e5","#059669","#d97706","#dc2626","#7c3aed","#0284c7"];
+const ACCOUNT_ICONS  = ["🏦","💳","💵","📈","🪙","🏠"];
+const ACCOUNT_TYPES  = ["cuenta","deposito","bolsa"];
+const ACCOUNT_TYPE_LABELS = { cuenta:"Cuentas", deposito:"Depósitos", bolsa:"Bolsa" };
+const ACCOUNT_TYPE_COLORS = { cuenta:"#4f46e5", deposito:"#059669", bolsa:"#d97706" };
+const RECURRENCE_OPTIONS = [
+  { value:"none",     label:"Sin recurrencia" },
+  { value:"monthly",  label:"Mensual" },
+  { value:"quarterly",label:"Trimestral" },
+  { value:"yearly",   label:"Anual" },
+];
+const today = () => new Date().toISOString().split("T")[0];
+const fmx = n => new Intl.NumberFormat("es-ES",{style:"currency",currency:"EUR"}).format(n);
+const recLabel = {monthly:"Mensual", quarterly:"Trimestral", yearly:"Anual"};
+
+function getNextDate(dateStr, recurrence) {
+  const d = new Date(dateStr + "T00:00:00");
+  if(recurrence === "monthly")    d.setMonth(d.getMonth() + 1);
+  if(recurrence === "quarterly")  d.setMonth(d.getMonth() + 3);
+  if(recurrence === "yearly")     d.setFullYear(d.getFullYear() + 1);
+  return d.toISOString().split("T")[0];
+}
+
+// ─── DEPOSIT ALERT HELPER ────────────────────────────────────────────────────
+function daysUntil(dateStr) {
+  if(!dateStr) return null;
+  const diff = new Date(dateStr + "T00:00:00") - new Date();
+  return Math.ceil(diff / (1000 * 60 * 60 * 24));
+}
+
+// ─── PIE CHART ────────────────────────────────────────────────────────────────
+function PieChart({ data }) {
+  const total = data.reduce((s, d) => s + Math.max(d.value, 0), 0);
+  if (total === 0) return <p style={{color:"#94a3b8",fontSize:13,textAlign:"center"}}>Sin datos</p>;
+  let cumulative = 0;
+  const slices = data.map(d => {
+    const pct = Math.max(d.value, 0) / total;
+    const start = cumulative;
+    cumulative += pct;
+    return { ...d, pct, start };
+  });
+  const size = 140;
+  const cx = size / 2, cy = size / 2, r = 52, inner = 30;
+  function polarToXY(pct) {
+    const angle = pct * 2 * Math.PI - Math.PI / 2;
+    return [cx + r * Math.cos(angle), cy + r * Math.sin(angle)];
+  }
+  function innerXY(pct) {
+    const angle = pct * 2 * Math.PI - Math.PI / 2;
+    return [cx + inner * Math.cos(angle), cy + inner * Math.sin(angle)];
+  }
+  return (
+    <div style={{display:"flex",alignItems:"center",gap:20,flexWrap:"wrap"}}>
+      <svg width={size} height={size}>
+        {slices.map((s, i) => {
+          if(s.pct < 0.001) return null;
+          const [x1,y1] = polarToXY(s.start);
+          const [x2,y2] = polarToXY(s.start + s.pct);
+          const [ix1,iy1] = innerXY(s.start);
+          const [ix2,iy2] = innerXY(s.start + s.pct);
+          const large = s.pct > 0.5 ? 1 : 0;
+          return (
+            <path key={i}
+              d={`M ${ix1} ${iy1} L ${x1} ${y1} A ${r} ${r} 0 ${large} 1 ${x2} ${y2} L ${ix2} ${iy2} A ${inner} ${inner} 0 ${large} 0 ${ix1} ${iy1} Z`}
+              fill={s.color} opacity={0.9}/>
+          );
+        })}
+      </svg>
+      <div style={{display:"flex",flexDirection:"column",gap:8}}>
+        {slices.map((s,i) => (
+          <div key={i} style={{display:"flex",alignItems:"center",gap:8}}>
+            <div style={{width:10,height:10,borderRadius:"50%",background:s.color,flexShrink:0}}/>
+            <div>
+              <span style={{fontSize:12,color:"#475569",fontWeight:600}}>{s.label}</span>
+              <span style={{fontSize:11,color:"#94a3b8",marginLeft:6}}>{(s.pct*100).toFixed(1)}%</span>
+              <span style={{fontSize:12,color:"#1e293b",marginLeft:6,fontWeight:700}}>{fmx(s.value)}</span>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ─── EXPORT HELPERS ───────────────────────────────────────────────────────────
+function exportCSV(transactions, accounts) {
+  const accMap = Object.fromEntries(accounts.map(a=>[a.id, a.name]));
+  const header = ["Fecha","Descripción","Categoría","Tipo","Importe","Cuenta","Recurrente"];
+  const rows = transactions.map(t=>[
+    t.date, t.description, t.category, t.type,
+    t.amount.toFixed(2), accMap[t.account_id]||"",
+    t.recurrence && t.recurrence!=="none" ? t.recurrence : "No"
+  ]);
+  const csv = [header, ...rows].map(r=>r.join(",")).join("\n");
+  const blob = new Blob(["\uFEFF"+csv],{type:"text/csv;charset=utf-8"});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a"); a.href=url; a.download="contabilidad-xhus.csv"; a.click();
+  URL.revokeObjectURL(url);
+}
+
+function exportHTML(transactions, accounts, totals) {
+  const accMap = Object.fromEntries(accounts.map(a=>[a.id, a.name]));
+  const rows = [...transactions].sort((a,b)=>b.date.localeCompare(a.date)).map(t=>`
+    <tr style="border-bottom:1px solid #e5e7eb">
+      <td style="padding:8px 12px">${t.date}</td><td style="padding:8px 12px">${t.description}</td>
+      <td style="padding:8px 12px">${t.category}</td>
+      <td style="padding:8px 12px;color:${t.type==="ingreso"?"#059669":"#dc2626"};font-weight:600">${t.type==="ingreso"?"Ingreso":"Gasto"}</td>
+      <td style="padding:8px 12px;text-align:right;color:${t.type==="ingreso"?"#059669":"#dc2626"};font-weight:600">${t.type==="ingreso"?"+":"-"}${fmx(t.amount)}</td>
+      <td style="padding:8px 12px">${accMap[t.account_id]||""}</td>
+    </tr>`).join("");
+  const html=`<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Contabilidad Xhus</title>
+  <style>body{font-family:sans-serif;padding:32px;color:#111}h1{color:#4f46e5}table{width:100%;border-collapse:collapse}th{background:#4f46e5;color:white;padding:10px 12px;text-align:left}</style>
+  </head><body><h1>📊 Contabilidad Xhus</h1>
+  <p>Generado: ${new Date().toLocaleDateString("es-ES",{dateStyle:"long"})}</p>
+  <div style="display:flex;gap:24px;margin:20px 0">
+    <div style="background:#f0fdf4;padding:16px 24px;border-radius:12px;border-left:4px solid #059669"><b>Ingresos</b><br><span style="font-size:20px;color:#059669">${fmx(totals.ingresos)}</span></div>
+    <div style="background:#fef2f2;padding:16px 24px;border-radius:12px;border-left:4px solid #dc2626"><b>Gastos</b><br><span style="font-size:20px;color:#dc2626">${fmx(totals.gastos)}</span></div>
+    <div style="background:#eff6ff;padding:16px 24px;border-radius:12px;border-left:4px solid #4f46e5"><b>Balance</b><br><span style="font-size:20px;color:#4f46e5">${fmx(totals.balance)}</span></div>
+  </div>
+  <table><thead><tr><th>Fecha</th><th>Descripción</th><th>Categoría</th><th>Tipo</th><th>Importe</th><th>Cuenta</th></tr></thead>
+  <tbody>${rows}</tbody></table></body></html>`;
+  const blob=new Blob([html],{type:"text/html;charset=utf-8"});
+  const url=URL.createObjectURL(blob);
+  const a=document.createElement("a"); a.href=url; a.download="reporte-xhus.html"; a.click(); URL.revokeObjectURL(url);
+}
+
+// ─── MAIN APP ─────────────────────────────────────────────────────────────────
+export default function App() {
+  const [user, setUser]                   = useState(null);
+  const [authLoading, setAuthLoading]     = useState(true);
+  const [loginForm, setLoginForm]         = useState({ email:"", password:"" });
+  const [loginError, setLoginError]       = useState("");
+  const [loginLoading, setLoginLoading]   = useState(false);
+  const [transactions, setTransactions]   = useState([]);
+  const [accounts, setAccounts]           = useState([]);
+  const [budgets, setBudgets]             = useState([]);
+  const [recurrents, setRecurrents]       = useState([]);
+  const [monthlyLimit, setMonthlyLimit]   = useState(null);
+  const [monthlyLimitForm, setMonthlyLimitForm] = useState("");
+  const [stocks, setStocks]               = useState([]);
+  const [stockForm, setStockForm]         = useState({ account_id:"", name:"", buy_date:today(), buy_price:"", quantity:"", sell_date:"", sell_price:"" });
+  const [editStock, setEditStock]         = useState(null);
+  const [selectedStockAcc, setSelectedStockAcc] = useState(null);
+  const [loading, setLoading]             = useState(true);
+  const [sidebarOpen, setSidebarOpen]     = useState(window.innerWidth >= 768);
+  const [view, setView]                   = useState(() => sessionStorage.getItem("xhus_view") || "dashboard");
+  const [selectedAccountId, setSelectedAccountId] = useState(null);
+  const [filter, setFilter]               = useState("all");
+  const [filterAcc, setFilterAcc]         = useState("all");
+  const [search, setSearch]               = useState("");
+  const [dateFrom, setDateFrom]           = useState("");
+  const [dateTo, setDateTo]               = useState("");
+  const [editTx, setEditTx]               = useState(null);
+  const [editAcc, setEditAcc]             = useState(null);
+  const [editBudget, setEditBudget]       = useState(null);
+  const [editRec, setEditRec]             = useState(null);
+  const [modal, setModal]                 = useState(null);
+  const [deleteId, setDeleteId]           = useState(null);
+  const [toast, setToast]                 = useState(null);
+  const [txForm, setTxForm]               = useState({ date:today(), description:"", category:"", type:"gasto", amount:"", account_id:"", recurrence:"none", recurrence_end:"" });
+  const [accForm, setAccForm]             = useState({ name:"", bank:"", color:ACCOUNT_COLORS[0], icon:ACCOUNT_ICONS[0], balance:"", type:"cuenta", sort_order:0, dep1_amount:"", dep1_start:"", dep1_end:"", dep1_rate:"", dep2_amount:"", dep2_start:"", dep2_end:"", dep2_rate:"" });
+  const [budgetForm, setBudgetForm]       = useState({ category:"", amount:"" });
+  const [recForm, setRecForm]             = useState({ amount:"" });
+
+  const { w } = useWindowSize();
+  const isMobile = w < 768;
+
+  const showToast = (msg, color="#4f46e5") => { setToast({msg,color}); setTimeout(()=>setToast(null),2600); };
+
+  // Persist view in sessionStorage
+  const setViewPersist = (v) => { setView(v); sessionStorage.setItem("xhus_view", v); };
+
+  const handleLogin = async () => {
+    setLoginError(""); setLoginLoading(true);
+    const { error } = await supabase.auth.signInWithPassword({ email:loginForm.email, password:loginForm.password });
+    if(error) setLoginError("Email o contraseña incorrectos");
+    setLoginLoading(false);
+  };
+  const handleLogout = async () => {
+    await supabase.auth.signOut();
+    setUser(null);
+    setTransactions([]); setAccounts([]); setBudgets([]); setRecurrents([]); setMonthlyLimit(null);
+    sessionStorage.removeItem("xhus_view");
+  };
+
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setUser(session?.user ?? null);
+      setAuthLoading(false);
+      if(session?.user) loadAll();
+    });
+    supabase.auth.onAuthStateChange((_event, session) => {
+      setUser(session?.user ?? null);
+      if(session?.user) loadAll();
+    });
+  }, []);
+
+  useEffect(() => {
+    if(!user) return;
+    const txSub  = supabase.channel('tx').on('postgres_changes',{event:'*',schema:'public',table:'transactions'},()=>loadTransactions()).subscribe();
+    const accSub = supabase.channel('acc').on('postgres_changes',{event:'*',schema:'public',table:'accounts'},()=>loadAccounts()).subscribe();
+    const budSub = supabase.channel('bud').on('postgres_changes',{event:'*',schema:'public',table:'budgets'},()=>loadBudgets()).subscribe();
+    const recSub = supabase.channel('rec').on('postgres_changes',{event:'*',schema:'public',table:'recurrents'},()=>loadRecurrents()).subscribe();
+    const stSub  = supabase.channel('st').on('postgres_changes',{event:'*',schema:'public',table:'stock_positions'},()=>loadStocks()).subscribe();
+    return () => { txSub.unsubscribe(); accSub.unsubscribe(); budSub.unsubscribe(); recSub.unsubscribe(); stSub.unsubscribe(); };
+  }, [user]);
+
+  const loadAll = async () => {
+    setLoading(true);
+    await Promise.all([loadTransactions(), loadAccounts(), loadBudgets(), loadRecurrents(), loadMonthlyLimit(), loadStocks()]);
+    setLoading(false);
+  };
+
+  const loadTransactions = async () => {
+    const { data } = await supabase.from("transactions").select("*").order("date",{ascending:false}).order("created_at",{ascending:false});
+    if(data) setTransactions(data);
+  };
+  const loadAccounts = async () => {
+    const { data } = await supabase.from("accounts").select("*").order("sort_order",{ascending:true});
+    if(data) setAccounts(data);
+  };
+  const loadBudgets = async () => {
+    const { data } = await supabase.from("budgets").select("*").order("created_at",{ascending:true});
+    if(data) setBudgets(data);
+  };
+  const loadRecurrents = async () => {
+    const { data } = await supabase.from("recurrents").select("*").order("next_date",{ascending:false});
+    if(data) { setRecurrents(data); await autoGenerateRecurrents(data); }
+  };
+  const loadStocks = async () => {
+    const { data } = await supabase.from("stock_positions").select("*").order("buy_date",{ascending:false});
+    if(data) setStocks(data);
+  };
+
+  const loadMonthlyLimit = async () => {
+    const { data } = await supabase.from("monthly_limit").select("*").limit(1).maybeSingle();
+    if(data) setMonthlyLimit(data);
+  };
+
+  const autoGenerateRecurrents = async (recs) => {
+    const todayStr = today();
+    for(const rec of recs) {
+      let nextDate = rec.next_date;
+      const inserts = [];
+      while(nextDate <= todayStr && (!rec.end_date || nextDate <= rec.end_date)) {
+        inserts.push({ date:nextDate, description:rec.description, category:rec.category, type:rec.type, amount:rec.amount, account_id:rec.account_id, recurrence:rec.recurrence, user_id:rec.user_id });
+        nextDate = getNextDate(nextDate, rec.recurrence);
+      }
+      if(inserts.length > 0) {
+        await supabase.from("transactions").insert(inserts);
+        await supabase.from("recurrents").update({next_date:nextDate}).eq("id",rec.id);
+      }
+    }
+  };
+
+  // ── Derived data ──────────────────────────────────────────────────────────
+  const filteredTx = useMemo(() => {
+    let list = transactions;
+    if(selectedAccountId) list = list.filter(t => t.account_id === selectedAccountId);
+    return list
+      .filter(t => filter==="all" || t.type===filter)
+      .filter(t => filterAcc==="all" || t.account_id===filterAcc)
+      .filter(t => t.description.toLowerCase().includes(search.toLowerCase()) || t.category.toLowerCase().includes(search.toLowerCase()))
+      .filter(t => !dateFrom || t.date >= dateFrom)
+      .filter(t => !dateTo || t.date <= dateTo);
+  }, [transactions, filter, filterAcc, search, dateFrom, dateTo, selectedAccountId]);
+
+  // Running balance per transaction
+  const txWithBalance = useMemo(() => {
+    const list = [...filteredTx].sort((a,b) => a.date.localeCompare(b.date) || (a.created_at||"").localeCompare(b.created_at||""));
+    // Start from account initial balance if filtering by one account
+    const acc = selectedAccountId ? accounts.find(a=>a.id===selectedAccountId) : null;
+    let balance = acc ? (acc.balance || 0) : 0;
+    const result = list.map(t => {
+      balance += t.type === "ingreso" ? t.amount : -t.amount;
+      return { ...t, runningBalance: balance };
+    });
+    return result.reverse();
+  }, [filteredTx, selectedAccountId, accounts]);
+
+  const totals = useMemo(() => {
+    const ing = transactions.filter(t=>t.type==="ingreso").reduce((s,t)=>s+t.amount,0);
+    const gas = transactions.filter(t=>t.type==="gasto").reduce((s,t)=>s+t.amount,0);
+    return { ingresos:ing, gastos:gas, balance:ing-gas };
+  }, [transactions]);
+
+  const accountTotals = useMemo(() => {
+    const map = {};
+    accounts.forEach(a => {
+      const ing = transactions.filter(t=>t.account_id===a.id&&t.type==="ingreso").reduce((s,t)=>s+t.amount,0);
+      const gas = transactions.filter(t=>t.account_id===a.id&&t.type==="gasto").reduce((s,t)=>s+t.amount,0);
+      map[a.id] = { ingresos:ing, gastos:gas, balance:a.balance+ing-gas, txCount:transactions.filter(t=>t.account_id===a.id).length };
+    });
+    return map;
+  }, [accounts, transactions]);
+
+  const byCategory = useMemo(() => {
+    const map = {};
+    transactions.filter(t=>t.type==="gasto").forEach(t=>{map[t.category]=(map[t.category]||0)+t.amount;});
+    return Object.entries(map).sort((a,b)=>b[1]-a[1]).slice(0,6);
+  }, [transactions]);
+
+  const monthlyData = useMemo(() => {
+    const map = {};
+    transactions.forEach(t=>{const m=new Date(t.date).getMonth(); if(!map[m])map[m]={ing:0,gas:0}; t.type==="ingreso"?map[m].ing+=t.amount:map[m].gas+=t.amount;});
+    return map;
+  }, [transactions]);
+
+  const budgetsWithSpent = useMemo(() => budgets.map(b => {
+    const spent = transactions.filter(t=>t.type==="gasto"&&t.category===b.category).reduce((s,t)=>s+t.amount,0);
+    return {...b, spent};
+  }), [budgets, transactions]);
+
+  // Deposit alerts - deposits expiring within 30 days
+  const depositAlerts = useMemo(() => {
+    return deposits.map(d => {
+      const days = daysUntil(d.end_date);
+      const acc = accounts.find(a=>a.id===d.account_id);
+      return { ...d, daysLeft: days, accName: acc?.name||"", accIcon: acc?.icon||"🏦" };
+    }).filter(d => d.daysLeft !== null && d.daysLeft <= 30 && d.daysLeft >= 0)
+      .sort((a,b) => a.daysLeft - b.daysLeft);
+  }, [deposits, accounts]);
+
+  // Monthly savings calculation
+  const monthlySavings = useMemo(() => {
+    const currentMonth = new Date().toISOString().slice(0,7);
+    const monthIng = transactions.filter(t=>t.type==="ingreso"&&t.date.startsWith(currentMonth)).reduce((s,t)=>s+t.amount,0);
+    const monthGas = transactions.filter(t=>t.type==="gasto"&&t.date.startsWith(currentMonth)).reduce((s,t)=>s+t.amount,0);
+    const totalPatrimony = accounts.reduce((s,a)=>{ const t=accountTotals[a.id]; return s+(t?t.balance:a.balance); },0);
+    return { monthIng, monthGas, saved: monthIng - monthGas, totalPatrimony };
+  }, [transactions, accounts, accountTotals]);
+
+  // Stocks computed values
+  const stocksWithValue = useMemo(() => {
+    return stocks.map(s => {
+      const currentValue = s.sell_price ? s.sell_price * s.quantity : s.buy_price * s.quantity;
+      const invested = s.buy_price * s.quantity;
+      const gain = currentValue - invested;
+      const gainPct = ((gain / invested) * 100);
+      return { ...s, currentValue, invested, gain, gainPct };
+    });
+  }, [stocks]);
+
+  // Pie chart data by account type
+  const pieData = useMemo(() => {
+    return ACCOUNT_TYPES.map(type => {
+      const value = accounts.filter(a=>a.type===type).reduce((s,a)=>{
+        const tot = accountTotals[a.id];
+        return s + (tot ? tot.balance : a.balance);
+      }, 0);
+      return { label:ACCOUNT_TYPE_LABELS[type], value:Math.max(value,0), color:ACCOUNT_TYPE_COLORS[type] };
+    }).filter(d => d.value > 0);
+  }, [accounts, accountTotals]);
+
+  const maxBar = Math.max(...Object.values(monthlyData).map(v=>Math.max(v.ing,v.gas)),1);
+
+  // ── Transaction CRUD ──────────────────────────────────────────────────────
+  const submitTx = async () => {
+    const {date,description,category,type,amount,account_id,recurrence,recurrence_end} = txForm;
+    if(!date||!description||!category||!account_id) return showToast("Completa todos los campos","#ef4444");
+    const amt = parseFloat(amount);
+    if(isNaN(amt)||amt<=0) return showToast("Importe inválido","#ef4444");
+    if(editTx) {
+      const {error} = await supabase.from("transactions").update({date,description,category,type,amount:amt,account_id}).eq("id",editTx);
+      if(error) return showToast(error.message,"#ef4444");
+      showToast("Movimiento actualizado ✓","#059669"); setEditTx(null);
+    } else {
+      const {error} = await supabase.from("transactions").insert({date,description,category,type,amount:amt,account_id,recurrence,user_id:user.id});
+      if(error) return showToast(error.message,"#ef4444");
+      if(recurrence && recurrence!=="none") {
+        const nextDate = getNextDate(date, recurrence);
+        await supabase.from("recurrents").insert({description,category,type,amount:amt,account_id,recurrence,end_date:recurrence_end||null,next_date:nextDate,user_id:user.id});
+        showToast("Movimiento recurrente creado ✓","#059669");
+      } else {
+        showToast("Movimiento agregado ✓","#059669");
+      }
+    }
+    setTxForm({date:today(),description:"",category:"",type:"gasto",amount:"",account_id:accounts[0]?.id||"",recurrence:"none",recurrence_end:""});
+    setViewPersist("transactions");
+  };
+
+  const startEditTx = t => { setTxForm({date:t.date,description:t.description,category:t.category,type:t.type,amount:String(t.amount),account_id:t.account_id,recurrence:"none",recurrence_end:""}); setEditTx(t.id); setViewPersist("add"); };
+  const confirmDeleteTx = id => { setDeleteId(id); setModal("deleteT"); };
+  const deleteTx = async () => { await supabase.from("transactions").delete().eq("id",deleteId); setModal(null); showToast("Eliminado","#f59e0b"); };
+
+  // ── Recurrent CRUD ────────────────────────────────────────────────────────
+  const deleteRecurrent = async id => { await supabase.from("recurrents").delete().eq("id",id); showToast("Recurrente eliminado","#f59e0b"); };
+  const startEditRec = r => { setRecForm({amount:String(r.amount)}); setEditRec(r.id); setModal("editRec"); };
+  const saveRecAmount = async () => {
+    const amt = parseFloat(recForm.amount);
+    if(isNaN(amt)||amt<=0) return showToast("Importe inválido","#ef4444");
+    await supabase.from("recurrents").update({amount:amt}).eq("id",editRec);
+    setModal(null); setEditRec(null); showToast("Importe actualizado ✓","#059669");
+  };
+
+  // ── Account CRUD ──────────────────────────────────────────────────────────
+  const submitAcc = async () => {
+    const {name,bank,color,icon,balance,type,dep1_amount,dep1_start,dep1_end,dep1_rate,dep2_amount,dep2_start,dep2_end,dep2_rate} = accForm;
+    if(!name||!bank) return showToast("Nombre y banco requeridos","#ef4444");
+    const bal = parseFloat(balance)||0;
+    const sortOrder = accounts.length;
+    const depPayload = type==="deposito" ? {
+      dep1_amount:dep1_amount?parseFloat(dep1_amount):null, dep1_start:dep1_start||null, dep1_end:dep1_end||null, dep1_rate:dep1_rate?parseFloat(dep1_rate):null,
+      dep2_amount:dep2_amount?parseFloat(dep2_amount):null, dep2_start:dep2_start||null, dep2_end:dep2_end||null, dep2_rate:dep2_rate?parseFloat(dep2_rate):null,
+    } : {dep1_amount:null,dep1_start:null,dep1_end:null,dep1_rate:null,dep2_amount:null,dep2_start:null,dep2_end:null,dep2_rate:null};
+    if(editAcc) {
+      const {error} = await supabase.from("accounts").update({name,bank,color,icon,balance:bal,type,...depPayload}).eq("id",editAcc);
+      if(error) return showToast("Error al actualizar","#ef4444");
+      showToast("Cuenta actualizada ✓","#059669");
+    } else {
+      const {error} = await supabase.from("accounts").insert({name,bank,color,icon,balance:bal,type,sort_order:sortOrder,user_id:user.id,...depPayload});
+      if(error) return showToast("Error al crear cuenta","#ef4444");
+      showToast("Cuenta creada ✓","#059669");
+    }
+    setAccForm({name:"",bank:"",color:ACCOUNT_COLORS[0],icon:ACCOUNT_ICONS[0],balance:"",type:"cuenta",sort_order:0});
+    setEditAcc(null); setModal(null);
+  };
+  const startEditAcc = a => { setAccForm({name:a.name,bank:a.bank,color:a.color,icon:a.icon,balance:String(a.balance),type:a.type||"cuenta",sort_order:a.sort_order||0,dep1_amount:a.dep1_amount?String(a.dep1_amount):"",dep1_start:a.dep1_start||"",dep1_end:a.dep1_end||"",dep1_rate:a.dep1_rate?String(a.dep1_rate):"",dep2_amount:a.dep2_amount?String(a.dep2_amount):"",dep2_start:a.dep2_start||"",dep2_end:a.dep2_end||"",dep2_rate:a.dep2_rate?String(a.dep2_rate):""}); setEditAcc(a.id); setModal("editAcc"); };
+  const confirmDeleteAcc = id => { setDeleteId(id); setModal("deleteA"); };
+  const deleteAcc = async () => {
+    if(accounts.length<=1) return showToast("Necesitas al menos una cuenta","#ef4444");
+    await supabase.from("transactions").delete().eq("account_id",deleteId);
+    await supabase.from("accounts").delete().eq("id",deleteId);
+    setModal(null); showToast("Cuenta eliminada","#f59e0b");
+  };
+
+  // Move account up/down
+  const moveAccount = async (id, direction) => {
+    const newOrder = [...accounts];
+    const idx = newOrder.findIndex(a=>a.id===id);
+    const targetIdx = direction==="up" ? idx-1 : idx+1;
+    if(targetIdx<0 || targetIdx>=newOrder.length) return;
+    [newOrder[idx], newOrder[targetIdx]] = [newOrder[targetIdx], newOrder[idx]];
+    setAccounts(newOrder);
+    await supabase.from("accounts").update({sort_order:idx}).eq("id",newOrder[idx].id);
+    await supabase.from("accounts").update({sort_order:targetIdx}).eq("id",newOrder[targetIdx].id);
+  };
+
+  // ── Budget CRUD ───────────────────────────────────────────────────────────
+  const submitBudget = async () => {
+    const {category,amount} = budgetForm;
+    if(!category) return showToast("Selecciona una categoría","#ef4444");
+    const amt = parseFloat(amount);
+    if(isNaN(amt)||amt<=0) return showToast("Importe inválido","#ef4444");
+    if(editBudget) {
+      await supabase.from("budgets").update({category,amount:amt}).eq("id",editBudget);
+      showToast("Presupuesto actualizado ✓","#059669");
+    } else {
+      if(budgets.find(b=>b.category===category)) return showToast("Ya existe presupuesto para esa categoría","#ef4444");
+      await supabase.from("budgets").insert({category,amount:amt,user_id:user.id});
+      showToast("Presupuesto creado ✓","#059669");
+    }
+    setBudgetForm({category:"",amount:""}); setEditBudget(null); setModal(null);
+  };
+  const startEditBudget = b => { setBudgetForm({category:b.category,amount:String(b.amount)}); setEditBudget(b.id); setModal("editBudget"); };
+  const confirmDeleteBudget = id => { setDeleteId(id); setModal("deleteB"); };
+  const deleteBudget = async () => { await supabase.from("budgets").delete().eq("id",deleteId); setModal(null); showToast("Presupuesto eliminado","#f59e0b"); };
+
+  const submitStock = async () => {
+    const { account_id, name, buy_date, buy_price, quantity, sell_date, sell_price } = stockForm;
+    if(!account_id||!name||!buy_date||!buy_price||!quantity) return showToast("Completa los campos obligatorios","#ef4444");
+    const bp = parseFloat(buy_price), qty = parseFloat(quantity);
+    if(isNaN(bp)||bp<=0||isNaN(qty)||qty<=0) return showToast("Precio y cantidad inválidos","#ef4444");
+    const sp = sell_price ? parseFloat(sell_price) : null;
+    const payload = { account_id, name, buy_date, buy_price:bp, quantity:qty, sell_date:sell_date||null, sell_price:sp, user_id:user.id };
+    if(editStock) {
+      await supabase.from("stock_positions").update(payload).eq("id",editStock);
+      showToast("Valor actualizado ✓","#059669"); setEditStock(null);
+    } else {
+      await supabase.from("stock_positions").insert(payload);
+      showToast("Valor añadido ✓","#059669");
+    }
+    setStockForm({ account_id:"", name:"", buy_date:today(), buy_price:"", quantity:"", sell_date:"", sell_price:"" });
+    setModal(null);
+  };
+  const startEditStock = s => { setStockForm({ account_id:s.account_id, name:s.name, buy_date:s.buy_date, buy_price:String(s.buy_price), quantity:String(s.quantity), sell_date:s.sell_date||"", sell_price:s.sell_price?String(s.sell_price):"" }); setEditStock(s.id); setModal("newStock"); };
+  const deleteStock = async id => { await supabase.from("stock_positions").delete().eq("id",id); showToast("Valor eliminado","#f59e0b"); };
+
+  const saveMonthlyLimit = async () => {
+    const amt = parseFloat(monthlyLimitForm);
+    if(isNaN(amt)||amt<=0) return showToast("Importe inválido","#ef4444");
+    if(monthlyLimit) { await supabase.from("monthly_limit").update({amount:amt}).eq("id",monthlyLimit.id); }
+    else { await supabase.from("monthly_limit").insert({amount:amt,user_id:user.id}); }
+    await loadMonthlyLimit(); setMonthlyLimitForm(""); showToast("Límite mensual guardado ✓","#059669");
+  };
+  const deleteMonthlyLimit = async () => {
+    if(monthlyLimit) await supabase.from("monthly_limit").delete().eq("id",monthlyLimit.id);
+    setMonthlyLimit(null); showToast("Límite mensual eliminado","#f59e0b");
+  };
+
+  const S = styles;
+  const navItems = [
+    {v:"dashboard",  icon:"◉", label:"Resumen"},
+    {v:"accounts",   icon:"⊞", label:"Cuentas"},
+    {v:"transactions",icon:"≡",label:"Movimientos"},
+    {v:"add",        icon:"＋", label:"Nuevo"},
+    {v:"recurrents", icon:"↺", label:"Recurrentes"},
+    {v:"budgets",    icon:"◎", label:"Presupuestos"},
+  ];
+
+  // ── Auth loading ──────────────────────────────────────────────────────────
+  if(authLoading) return (
+    <div style={{...S.root,alignItems:"center",justifyContent:"center",flexDirection:"column",gap:16}}>
+      <span style={{fontSize:36,color:"#4f46e5"}}>◈</span>
+      <p style={{color:"#4f46e5",fontWeight:600,fontSize:16}}>Cargando…</p>
+    </div>
+  );
+
+  // ── Login screen ──────────────────────────────────────────────────────────
+  if(!user) return (
+    <div style={{display:"flex",minHeight:"100vh",background:"#f8fafc",alignItems:"center",justifyContent:"center",fontFamily:"'DM Sans','Segoe UI',sans-serif"}}>
+      <div style={{background:"#fff",borderRadius:20,padding:"40px 36px",width:"100%",maxWidth:380,boxShadow:"0 8px 40px rgba(0,0,0,.10)",border:"1px solid #e2e8f0"}}>
+        <div style={{textAlign:"center",marginBottom:32}}>
+          <span style={{fontSize:40,color:"#4f46e5"}}>◈</span>
+          <h1 style={{margin:"12px 0 4px",fontSize:22,fontWeight:700,color:"#0f172a"}}>Contabilidad Xhus</h1>
+          <p style={{margin:0,fontSize:14,color:"#94a3b8"}}>Inicia sesión para continuar</p>
+        </div>
+        <label style={{display:"block",fontSize:11,color:"#64748b",textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:5}}>Email</label>
+        <input style={{width:"100%",background:"#f8fafc",border:"1px solid #e2e8f0",color:"#1e293b",borderRadius:10,padding:"11px 13px",fontSize:14,outline:"none",boxSizing:"border-box",marginBottom:14}}
+          type="email" placeholder="tu@email.com" value={loginForm.email}
+          onChange={e=>setLoginForm(f=>({...f,email:e.target.value}))}
+          onKeyDown={e=>e.key==="Enter"&&handleLogin()}/>
+        <label style={{display:"block",fontSize:11,color:"#64748b",textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:5}}>Contraseña</label>
+        <input style={{width:"100%",background:"#f8fafc",border:"1px solid #e2e8f0",color:"#1e293b",borderRadius:10,padding:"11px 13px",fontSize:14,outline:"none",boxSizing:"border-box",marginBottom:6}}
+          type="password" placeholder="••••••••" value={loginForm.password}
+          onChange={e=>setLoginForm(f=>({...f,password:e.target.value}))}
+          onKeyDown={e=>e.key==="Enter"&&handleLogin()}/>
+        {loginError && <p style={{color:"#dc2626",fontSize:12,margin:"4px 0 8px",fontWeight:500}}>⚠ {loginError}</p>}
+        <button style={{width:"100%",background:"#4f46e5",color:"#fff",border:"none",borderRadius:10,padding:"12px",fontWeight:700,cursor:"pointer",fontSize:15,marginTop:10,opacity:loginLoading?0.7:1}}
+          onClick={handleLogin} disabled={loginLoading}>{loginLoading?"Entrando…":"Entrar"}</button>
+        <p style={{textAlign:"center",fontSize:11,color:"#94a3b8",marginTop:20}}>🔒 Tus datos están cifrados y son privados</p>
+      </div>
+    </div>
+  );
+
+  if(loading) return (
+    <div style={{...S.root,alignItems:"center",justifyContent:"center",flexDirection:"column",gap:16}}>
+      <span style={{fontSize:36,color:"#4f46e5"}}>◈</span>
+      <p style={{color:"#4f46e5",fontWeight:600,fontSize:16}}>Cargando Contabilidad Xhus…</p>
+    </div>
+  );
+
+  return (
+    <div style={S.root}>
+      {toast && <div style={{...S.toast,background:toast.color}}>{toast.msg}</div>}
+
+      {/* SIDEBAR TOGGLE */}
+      <button onClick={()=>setSidebarOpen(o=>!o)}
+        style={{position:"fixed",top:12,left:sidebarOpen?226:8,zIndex:201,background:"#fff",border:"1px solid #e2e8f0",color:"#4f46e5",width:28,height:28,borderRadius:8,cursor:"pointer",fontSize:13,display:"flex",alignItems:"center",justifyContent:"center",transition:"left .2s",boxShadow:"0 2px 8px rgba(0,0,0,.10)"}}>
+        {sidebarOpen?"◀":"▶"}
+      </button>
+
+      {/* MODALS */}
+      {modal && (
+        <div style={S.overlay} onClick={()=>setModal(null)}>
+          <div style={S.modal} onClick={e=>e.stopPropagation()}>
+            {modal==="deleteT" && <><p style={S.modalTitle}>¿Eliminar movimiento?</p><p style={S.modalSub}>Esta acción no se puede deshacer.</p><div style={S.modalBtns}><button style={S.btnCancel} onClick={()=>setModal(null)}>Cancelar</button><button style={S.btnDanger} onClick={deleteTx}>Eliminar</button></div></>}
+            {modal==="deleteA" && <><p style={S.modalTitle}>¿Eliminar cuenta?</p><p style={S.modalSub}>Se eliminarán también todos sus movimientos.</p><div style={S.modalBtns}><button style={S.btnCancel} onClick={()=>setModal(null)}>Cancelar</button><button style={S.btnDanger} onClick={deleteAcc}>Eliminar</button></div></>}
+            {modal==="deleteB" && <><p style={S.modalTitle}>¿Eliminar presupuesto?</p><p style={S.modalSub}>Se borrará el límite para esa categoría.</p><div style={S.modalBtns}><button style={S.btnCancel} onClick={()=>setModal(null)}>Cancelar</button><button style={S.btnDanger} onClick={deleteBudget}>Eliminar</button></div></>}
+            {modal==="editRec" && <>
+              <p style={S.modalTitle}>Modificar importe recurrente</p>
+              <p style={S.modalSub}>El nuevo importe se aplicará a los siguientes movimientos generados.</p>
+              <label style={S.label}>Nuevo importe (€)</label>
+              <input style={S.input} type="number" placeholder="0.00" value={recForm.amount} onChange={e=>setRecForm(f=>({...f,amount:e.target.value}))}/>
+              <div style={S.modalBtns}><button style={S.btnCancel} onClick={()=>setModal(null)}>Cancelar</button><button style={S.btnPrimary} onClick={saveRecAmount}>Guardar</button></div>
+            </>}
+            {(modal==="newAcc"||modal==="editAcc") && <>
+              <p style={S.modalTitle}>{editAcc?"Editar cuenta":"Nueva cuenta"}</p>
+              <label style={S.label}>Tipo</label>
+              <div style={{display:"flex",gap:8,marginBottom:4}}>
+                {ACCOUNT_TYPES.map(t=>(
+                  <button key={t} onClick={()=>setAccForm(f=>({...f,type:t}))}
+                    style={{flex:1,padding:"8px",borderRadius:8,border:`2px solid ${accForm.type===t?ACCOUNT_TYPE_COLORS[t]:"#e2e8f0"}`,background:accForm.type===t?ACCOUNT_TYPE_COLORS[t]+"18":"#f8fafc",color:accForm.type===t?ACCOUNT_TYPE_COLORS[t]:"#64748b",fontWeight:600,cursor:"pointer",fontSize:12}}>
+                    {ACCOUNT_TYPE_LABELS[t]}
+                  </button>
+                ))}
+              </div>
+              <label style={S.label}>Nombre</label>
+              <input style={S.input} placeholder="Mi cuenta…" value={accForm.name} onChange={e=>setAccForm(f=>({...f,name:e.target.value}))}/>
+              <label style={S.label}>Banco / Institución</label>
+              <input style={S.input} placeholder="BBVA, HSBC…" value={accForm.bank} onChange={e=>setAccForm(f=>({...f,bank:e.target.value}))}/>
+              <label style={S.label}>Balance inicial (€)</label>
+              <input style={S.input} type="number" placeholder="0.00" value={accForm.balance} onChange={e=>setAccForm(f=>({...f,balance:e.target.value}))}/>
+              <label style={S.label}>Color</label>
+              <div style={{display:"flex",gap:8,marginBottom:4}}>
+                {ACCOUNT_COLORS.map(c=><button key={c} onClick={()=>setAccForm(f=>({...f,color:c}))} style={{width:26,height:26,borderRadius:"50%",background:c,border:accForm.color===c?"3px solid #1e293b":"2px solid transparent",cursor:"pointer"}}/>)}
+              </div>
+              <label style={S.label}>Ícono</label>
+              <div style={{display:"flex",gap:8,marginBottom:12}}>
+                {ACCOUNT_ICONS.map(ic=><button key={ic} onClick={()=>setAccForm(f=>({...f,icon:ic}))} style={{fontSize:20,width:36,height:36,borderRadius:8,background:accForm.icon===ic?"#eef2ff":"transparent",border:accForm.icon===ic?"2px solid #4f46e5":"2px solid transparent",cursor:"pointer"}}>{ic}</button>)}
+              </div>
+              {accForm.type==="deposito" && <>
+                <div style={{background:"#f0fdf4",border:"1px solid #bbf7d0",borderRadius:10,padding:"12px",marginTop:12}}>
+                  <p style={{margin:"0 0 8px",fontSize:12,fontWeight:700,color:"#059669"}}>Depósito 1</p>
+                  <label style={S.label}>Importe (€)</label>
+                  <input style={S.input} type="number" placeholder="0.00" value={accForm.dep1_amount} onChange={e=>setAccForm(f=>({...f,dep1_amount:e.target.value}))}/>
+                  <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
+                    <div><label style={S.label}>Fecha inicio</label><input style={S.input} type="date" value={accForm.dep1_start} onChange={e=>setAccForm(f=>({...f,dep1_start:e.target.value}))}/></div>
+                    <div><label style={S.label}>Fecha fin</label><input style={S.input} type="date" value={accForm.dep1_end} onChange={e=>setAccForm(f=>({...f,dep1_end:e.target.value}))}/></div>
+                  </div>
+                  <label style={S.label}>Interés % (opcional)</label>
+                  <input style={S.input} type="number" placeholder="Ej. 2.5" value={accForm.dep1_rate} onChange={e=>setAccForm(f=>({...f,dep1_rate:e.target.value}))}/>
+                </div>
+                <div style={{background:"#f0fdf4",border:"1px solid #bbf7d0",borderRadius:10,padding:"12px",marginTop:10}}>
+                  <p style={{margin:"0 0 8px",fontSize:12,fontWeight:700,color:"#059669"}}>Depósito 2 (opcional)</p>
+                  <label style={S.label}>Importe (€)</label>
+                  <input style={S.input} type="number" placeholder="0.00" value={accForm.dep2_amount} onChange={e=>setAccForm(f=>({...f,dep2_amount:e.target.value}))}/>
+                  <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
+                    <div><label style={S.label}>Fecha inicio</label><input style={S.input} type="date" value={accForm.dep2_start} onChange={e=>setAccForm(f=>({...f,dep2_start:e.target.value}))}/></div>
+                    <div><label style={S.label}>Fecha fin</label><input style={S.input} type="date" value={accForm.dep2_end} onChange={e=>setAccForm(f=>({...f,dep2_end:e.target.value}))}/></div>
+                  </div>
+                  <label style={S.label}>Interés % (opcional)</label>
+                  <input style={S.input} type="number" placeholder="Ej. 3.0" value={accForm.dep2_rate} onChange={e=>setAccForm(f=>({...f,dep2_rate:e.target.value}))}/>
+                </div>
+              </>}
+              <div style={S.modalBtns}><button style={S.btnCancel} onClick={()=>{setModal(null);setEditAcc(null);}}>Cancelar</button><button style={S.btnPrimary} onClick={submitAcc}>{editAcc?"Guardar":"Crear"}</button></div>
+            </>}
+            {(modal==="newBudget"||modal==="editBudget") && <>
+              <p style={S.modalTitle}>{editBudget?"Editar presupuesto":"Nuevo presupuesto"}</p>
+              <label style={S.label}>Categoría</label>
+              <select style={S.input} value={budgetForm.category} onChange={e=>setBudgetForm(f=>({...f,category:e.target.value}))}>
+                <option value="">-- Selecciona --</option>
+                {CATEGORIES.gasto.map(c=><option key={c} value={c}>{c}</option>)}
+              </select>
+              <label style={S.label}>Límite mensual (€)</label>
+              <input style={S.input} type="number" placeholder="0.00" value={budgetForm.amount} onChange={e=>setBudgetForm(f=>({...f,amount:e.target.value}))}/>
+              <div style={S.modalBtns}><button style={S.btnCancel} onClick={()=>{setModal(null);setEditBudget(null);}}>Cancelar</button><button style={S.btnPrimary} onClick={submitBudget}>{editBudget?"Guardar":"Crear"}</button></div>
+            </>}
+            {(modal==="newStock"||modal==="editStock") && <>
+              <p style={S.modalTitle}>{editStock?"Editar valor":"Añadir valor de bolsa"}</p>
+              <label style={S.label}>Cuenta de bolsa</label>
+              <select style={S.input} value={stockForm.account_id} onChange={e=>setStockForm(f=>({...f,account_id:e.target.value}))}>
+                <option value="">-- Selecciona --</option>
+                {accounts.filter(a=>(a.type||"cuenta")==="bolsa").map(a=><option key={a.id} value={a.id}>{a.icon} {a.name}</option>)}
+              </select>
+              <label style={S.label}>Nombre del valor</label>
+              <input style={S.input} placeholder="Ej. AAPL, Santander..." value={stockForm.name} onChange={e=>setStockForm(f=>({...f,name:e.target.value}))}/>
+              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+                <div><label style={S.label}>Fecha compra</label><input style={S.input} type="date" value={stockForm.buy_date} onChange={e=>setStockForm(f=>({...f,buy_date:e.target.value}))}/></div>
+                <div><label style={S.label}>Precio compra (€)</label><input style={S.input} type="number" placeholder="0.00" value={stockForm.buy_price} onChange={e=>setStockForm(f=>({...f,buy_price:e.target.value}))}/></div>
+              </div>
+              <label style={S.label}>Cantidad / Nº acciones</label>
+              <input style={S.input} type="number" placeholder="0" value={stockForm.quantity} onChange={e=>setStockForm(f=>({...f,quantity:e.target.value}))}/>
+              <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:10}}>
+                <div><label style={S.label}>Fecha venta (opcional)</label><input style={S.input} type="date" value={stockForm.sell_date} onChange={e=>setStockForm(f=>({...f,sell_date:e.target.value}))}/></div>
+                <div><label style={S.label}>Precio venta (€)</label><input style={S.input} type="number" placeholder="0.00" value={stockForm.sell_price} onChange={e=>setStockForm(f=>({...f,sell_price:e.target.value}))}/></div>
+              </div>
+              <div style={S.modalBtns}><button style={S.btnCancel} onClick={()=>{setModal(null);setEditStock(null);}}>Cancelar</button><button style={S.btnPrimary} onClick={submitStock}>{editStock?"Guardar":"Añadir"}</button></div>
+            </>}
+            {modal==="export" && <>
+              <p style={S.modalTitle}>Exportar datos</p>
+              <p style={S.modalSub}>Elige el formato:</p>
+              <div style={{display:"flex",flexDirection:"column",gap:10,marginBottom:20}}>
+                <button style={S.exportBtn} onClick={()=>{exportCSV(transactions,accounts);showToast("CSV descargado ✓","#059669");setModal(null);}}>
+                  <span style={{fontSize:22}}>📊</span><div><b>Excel / CSV</b><p style={{margin:0,fontSize:12,color:"#94a3b8"}}>Compatible con Excel, Google Sheets</p></div>
+                </button>
+                <button style={S.exportBtn} onClick={()=>{exportHTML(transactions,accounts,totals);showToast("Reporte descargado ✓","#059669");setModal(null);}}>
+                  <span style={{fontSize:22}}>📄</span><div><b>Reporte HTML</b><p style={{margin:0,fontSize:12,color:"#94a3b8"}}>Imprimible como PDF</p></div>
+                </button>
+              </div>
+              <button style={S.btnCancel} onClick={()=>setModal(null)}>Cerrar</button>
+            </>}
+          </div>
+        </div>
+      )}
+
+      {/* SIDEBAR OVERLAY */}
+      {sidebarOpen && isMobile && <div onClick={()=>setSidebarOpen(false)} style={{position:"fixed",inset:0,background:"rgba(15,23,42,.3)",zIndex:99}}/>}
+
+      {/* SIDEBAR */}
+      {sidebarOpen && (
+      <aside style={S.sidebar}>
+        <div style={S.logo}>
+          <span style={S.logoIcon}>◈</span>
+          <span style={S.logoText}>Contabilidad Xhus</span>
+        </div>
+        <nav style={S.nav}>
+          {navItems.map(({v,icon,label})=>(
+            <button key={v} style={{...S.navBtn,...(view===v?S.navBtnActive:{})}}
+              onClick={()=>{ setViewPersist(v); setSidebarOpen(false); if(v!=="add"){setEditTx(null);setTxForm({date:today(),description:"",category:"",type:"gasto",amount:"",account_id:accounts[0]?.id||"",recurrence:"none",recurrence_end:""});} }}>
+              <span style={S.navIcon}>{icon}</span><span>{label}</span>
+            </button>
+          ))}
+        </nav>
+        <button style={S.exportSideBtn} onClick={()=>setModal("export")}>⬇ Exportar</button>
+        <button style={{...S.exportSideBtn,marginTop:6,color:"#dc2626",borderColor:"#fecaca"}} onClick={handleLogout}>⏻ Cerrar sesión</button>
+        <div style={S.sidebalBox}>
+          <p style={S.sidebalLabel}>Balance total</p>
+          <p style={{...S.sidebalAmt,color:totals.balance>=0?"#059669":"#dc2626"}}>{fmx(totals.balance)}</p>
+          <div style={{display:"flex",justifyContent:"space-between",marginTop:8}}>
+            <span style={{fontSize:11,color:"#059669"}}>↑ {fmx(totals.ingresos)}</span>
+            <span style={{fontSize:11,color:"#dc2626"}}>↓ {fmx(totals.gastos)}</span>
+          </div>
+        </div>
+      </aside>
+      )}
+
+      {/* MAIN */}
+      <main style={{...S.main,marginLeft:sidebarOpen&&!isMobile?222:0,transition:"margin-left .2s"}}>
+
+        {/* ══ DASHBOARD ══ */}
+        {view==="dashboard" && (
+          <div style={{...S.page,padding:isMobile?"16px 14px 20px":"32px 36px",paddingTop:isMobile?"48px":"32px"}}>
+            <h1 style={S.pageTitle}>Resumen financiero</h1>
+            {depositAlerts.length > 0 && (
+              <div style={{background:"#fffbeb",border:"1px solid #fde68a",borderRadius:12,padding:"12px 16px",marginBottom:16}}>
+                <p style={{margin:0,fontWeight:700,color:"#d97706",fontSize:13}}>⏰ Depósitos próximos a vencer</p>
+                {depositAlerts.map(d=>(
+                  <p key={d.id} style={{margin:"4px 0 0",fontSize:12,color:"#92400e"}}>
+                    {d.icon} {d.name} — {d.label} — vence el {d.end_date} ({d.daysLeft===0?"hoy":d.daysLeft===1?"mañana":`en ${d.daysLeft} días`})
+                  </p>
+                ))}
+              </div>
+            )}
+            <p style={S.pageSub}>{new Date().toLocaleDateString("es-ES",{month:"long",year:"numeric"})}</p>
+            <div style={{...S.kpiRow,gridTemplateColumns:isMobile?"repeat(2,1fr)":"repeat(4,1fr)"}}>
+              {[
+                {label:"Balance",  value:totals.balance,  color:totals.balance>=0?"#059669":"#dc2626", bg:totals.balance>=0?"#f0fdf4":"#fef2f2", border:totals.balance>=0?"#bbf7d0":"#fecaca", icon:"⊕"},
+                {label:"Ingresos", value:totals.ingresos,  color:"#059669", bg:"#f0fdf4", border:"#bbf7d0", icon:"↑"},
+                {label:"Gastos",   value:totals.gastos,    color:"#dc2626", bg:"#fef2f2", border:"#fecaca", icon:"↓"},
+                {label:"Patrimonio", value:accounts.reduce((s,a)=>{const t=accountTotals[a.id]; return s+(t?t.balance:a.balance);},0), color:"#4f46e5", bg:"#eef2ff", border:"#c7d2fe", icon:"⊞"},
+              ].map(({label,value,color,bg,border,icon})=>(
+                <div key={label} style={{...S.kpi,background:bg,border:`1px solid ${border}`}}>
+                  <span style={{fontSize:isMobile?18:24,opacity:.7}}>{icon}</span>
+                  <div><p style={S.kpiLabel}>{label}</p><p style={{...S.kpiValue,color,fontSize:isMobile?15:20}}>{fmx(value)}</p></div>
+                </div>
+              ))}
+            </div>
+
+            {/* Monthly savings */}
+            <div style={{...S.card,background:"linear-gradient(135deg,#f0fdf4,#dcfce7)",border:"1px solid #bbf7d0",marginBottom:16}}>
+              <h2 style={{...S.cardTitle,marginBottom:12}}>💰 Ahorro del mes</h2>
+              <div style={{display:"flex",gap:24,flexWrap:"wrap"}}>
+                <div><p style={{margin:0,fontSize:11,color:"#64748b",textTransform:"uppercase"}}>Ingresos del mes</p><p style={{margin:"4px 0 0",fontSize:18,fontWeight:700,color:"#059669"}}>{fmx(monthlySavings.monthIng)}</p></div>
+                <div><p style={{margin:0,fontSize:11,color:"#64748b",textTransform:"uppercase"}}>Gastos del mes</p><p style={{margin:"4px 0 0",fontSize:18,fontWeight:700,color:"#dc2626"}}>{fmx(monthlySavings.monthGas)}</p></div>
+                <div><p style={{margin:0,fontSize:11,color:"#64748b",textTransform:"uppercase"}}>Ahorrado este mes</p><p style={{margin:"4px 0 0",fontSize:18,fontWeight:700,color:monthlySavings.saved>=0?"#059669":"#dc2626"}}>{fmx(monthlySavings.saved)}</p></div>
+                <div><p style={{margin:0,fontSize:11,color:"#64748b",textTransform:"uppercase"}}>Patrimonio total</p><p style={{margin:"4px 0 0",fontSize:18,fontWeight:700,color:"#4f46e5"}}>{fmx(monthlySavings.totalPatrimony)}</p></div>
+              </div>
+            </div>
+
+            <div style={{...S.twoCol,gridTemplateColumns:isMobile?"1fr":"1fr 1fr"}}>
+              <div style={S.card}>
+                <h2 style={S.cardTitle}>Actividad mensual</h2>
+                <div style={S.barChart}>
+                  {MONTHS.map((m,i)=>{ const d=monthlyData[i]||{ing:0,gas:0}; return (
+                    <div key={m} style={S.barGroup}>
+                      <div style={S.bars}>
+                        <div style={{...S.bar,height:`${(d.ing/maxBar)*100}%`,background:"#34d399"}}/>
+                        <div style={{...S.bar,height:`${(d.gas/maxBar)*100}%`,background:"#f87171"}}/>
+                      </div>
+                      <span style={S.barLabel}>{m}</span>
+                    </div>
+                  );})}
+                </div>
+                <div style={S.legend}>
+                  <span style={{...S.dot,background:"#34d399"}}/><span style={S.legLabel}>Ingresos</span>
+                  <span style={{...S.dot,background:"#f87171",marginLeft:12}}/><span style={S.legLabel}>Gastos</span>
+                </div>
+              </div>
+              <div style={S.card}>
+                <h2 style={S.cardTitle}>Distribución patrimonial</h2>
+                <PieChart data={pieData}/>
+              </div>
+            </div>
+
+            <div style={{...S.twoCol,gridTemplateColumns:isMobile?"1fr":"1fr 1fr"}}>
+              <div style={S.card}>
+                <h2 style={S.cardTitle}>Top gastos</h2>
+                {byCategory.length===0 && <p style={S.empty}>Sin gastos aún</p>}
+                {byCategory.map(([cat,val])=>(
+                  <div key={cat} style={S.catRow}>
+                    <div style={S.catInfo}><span style={S.catName}>{cat}</span><span style={S.catVal}>{fmx(val)}</span></div>
+                    <div style={S.progTrack}><div style={{...S.progBar,width:`${Math.min((val/(totals.gastos||1))*100,100)}%`}}/></div>
+                  </div>
+                ))}
+              </div>
+              <div style={S.card}>
+                <div style={S.cardHeader}><h2 style={S.cardTitle}>Mis cuentas</h2><button style={S.linkBtn} onClick={()=>setViewPersist("accounts")}>Administrar →</button></div>
+                {accounts.length===0 && <p style={S.empty}>Sin cuentas</p>}
+                <div style={{display:"flex",flexDirection:"column",gap:8}}>
+                  
+                  {[...accounts].map(a=>{
+                    const tot = accountTotals[a.id]||{balance:a.balance};
+                    return (
+                      <div key={a.id} style={{display:"flex",alignItems:"center",gap:8,padding:"8px 12px",borderRadius:10,background:"#f8fafc",border:"1px solid #e2e8f0"}}>
+                        <div style={{display:"flex",flexDirection:"column",gap:2}}>
+                          <button style={{...S.iconBtn,width:22,height:22,fontSize:10}} onClick={()=>moveAccount(a.id,"up")}>▲</button>
+                          <button style={{...S.iconBtn,width:22,height:22,fontSize:10}} onClick={()=>moveAccount(a.id,"down")}>▼</button>
+                        </div>
+                        <span style={{fontSize:18,cursor:"pointer"}} onClick={()=>{setSelectedAccountId(a.id);setViewPersist("transactions");}}>{a.icon}</span>
+                        <div style={{flex:1,minWidth:0,cursor:"pointer"}} onClick={()=>{setSelectedAccountId(a.id);setViewPersist("transactions");}}>
+                          <p style={{margin:0,fontSize:13,fontWeight:600,color:"#1e293b",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{a.name}</p>
+                          <p style={{margin:0,fontSize:11,color:"#94a3b8"}}>{ACCOUNT_TYPE_LABELS[a.type||"cuenta"]}</p>
+                        </div>
+                        <p style={{margin:0,fontWeight:700,color:tot.balance>=0?"#059669":"#dc2626",fontSize:14,flexShrink:0,cursor:"pointer"}} onClick={()=>{setSelectedAccountId(a.id);setViewPersist("transactions");}}>{fmx(tot.balance)}</p>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+
+            <div style={S.card}>
+              <div style={S.cardHeader}><h2 style={S.cardTitle}>Últimos movimientos</h2><button style={S.linkBtn} onClick={()=>setViewPersist("transactions")}>Ver todos →</button></div>
+              {transactions.length===0 && <p style={S.empty}>Sin movimientos aún</p>}
+              {transactions.slice(0,5).map(t=><TxRow key={t.id} t={t} accounts={accounts} onEdit={startEditTx} onDelete={confirmDeleteTx} showBalance={false}/>)}
+            </div>
+          </div>
+        )}
+
+        {/* ══ ACCOUNTS ══ */}
+        {view==="accounts" && (
+          <div style={{...S.page,padding:isMobile?"16px 14px 20px":"32px 36px",paddingTop:isMobile?"48px":"32px"}}>
+            <div style={S.pageHeader}>
+              <div><h1 style={S.pageTitle}>Mis Cuentas</h1><p style={S.pageSub}>{accounts.length} cuentas registradas</p></div>
+              <button style={S.btnPrimary} onClick={()=>{setAccForm({name:"",bank:"",color:ACCOUNT_COLORS[0],icon:ACCOUNT_ICONS[0],balance:"",type:"cuenta",sort_order:0});setEditAcc(null);setModal("newAcc");}}>+ Nueva</button>
+            </div>
+
+            {/* Balance total y por tipo */}
+            <div style={{...S.kpiRow,gridTemplateColumns:isMobile?"repeat(2,1fr)":"repeat(4,1fr)",marginBottom:20}}>
+              {[
+                {label:"Total patrimonio", value:accounts.reduce((s,a)=>{const t=accountTotals[a.id]; return s+(t?t.balance:a.balance);},0), color:"#4f46e5", bg:"#eef2ff", border:"#c7d2fe"},
+                ...ACCOUNT_TYPES.map(type=>({
+                  label:ACCOUNT_TYPE_LABELS[type],
+                  value:accounts.filter(a=>(a.type||"cuenta")===type).reduce((s,a)=>{const t=accountTotals[a.id]; return s+(t?t.balance:a.balance);},0),
+                  color:ACCOUNT_TYPE_COLORS[type],
+                  bg:type==="cuenta"?"#eef2ff":type==="deposito"?"#f0fdf4":"#fffbeb",
+                  border:type==="cuenta"?"#c7d2fe":type==="deposito"?"#bbf7d0":"#fde68a",
+                }))
+              ].map(({label,value,color,bg,border})=>(
+                <div key={label} style={{...S.kpi,background:bg,border:`1px solid ${border}`}}>
+                  <div><p style={S.kpiLabel}>{label}</p><p style={{...S.kpiValue,color,fontSize:isMobile?14:18}}>{fmx(value)}</p></div>
+                </div>
+              ))}
+            </div>
+
+            <p style={{fontSize:12,color:"#94a3b8",marginBottom:12}}>💡 Usa ▲▼ para cambiar el orden de las cuentas</p>
+
+            {ACCOUNT_TYPES.map(type => {
+              const typeAccounts = accounts.filter(a=>(a.type||"cuenta")===type);
+              if(typeAccounts.length===0) return null;
+              return (
+                <div key={type} style={{marginBottom:24}}>
+                  <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:12}}>
+                    <div style={{width:10,height:10,borderRadius:"50%",background:ACCOUNT_TYPE_COLORS[type]}}/>
+                    <h2 style={{fontSize:15,fontWeight:700,color:"#1e293b",margin:0}}>{ACCOUNT_TYPE_LABELS[type]}</h2>
+                    <span style={{fontSize:12,color:"#94a3b8"}}>({typeAccounts.length})</span>
+                  </div>
+                  <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(240px,1fr))",gap:14}}>
+                    {typeAccounts.map(a=>{
+                      const tot = accountTotals[a.id]||{ingresos:0,gastos:0,balance:a.balance,txCount:0};
+                      return (
+                        <div key={a.id}
+                          onClick={()=>{setSelectedAccountId(a.id);setViewPersist("transactions");}}
+                          style={{...S.accCard,borderTop:`3px solid ${a.color}`,cursor:"pointer"}}>
+                          <div style={{display:"flex",alignItems:"center",gap:12,marginBottom:12}}>
+                            <div style={{width:40,height:40,borderRadius:10,background:a.color+"18",display:"flex",alignItems:"center",justifyContent:"center",fontSize:20}}>{a.icon}</div>
+                            <div style={{flex:1,minWidth:0}}>
+                              <p style={{margin:0,fontWeight:700,color:"#0f172a",fontSize:14,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{a.name}</p>
+                              <p style={{margin:0,fontSize:11,color:"#94a3b8"}}>{a.bank}</p>
+                            </div>
+                            <div style={{display:"flex",gap:4}} onClick={e=>e.stopPropagation()}>
+                              <button style={S.iconBtn} onClick={()=>moveAccount(a.id,"up")} title="Subir">▲</button>
+                              <button style={S.iconBtn} onClick={()=>moveAccount(a.id,"down")} title="Bajar">▼</button>
+                              <button style={S.iconBtn} onClick={()=>startEditAcc(a)}>✎</button>
+                              <button style={{...S.iconBtn,...S.iconBtnDel}} onClick={()=>confirmDeleteAcc(a.id)}>✕</button>
+                            </div>
+                          </div>
+                          <p style={{margin:"0 0 12px",fontSize:20,fontWeight:700,color:tot.balance>=0?"#059669":"#dc2626"}}>{fmx(tot.balance)}</p>
+                          <div style={{display:"flex",justifyContent:"space-between",borderTop:"1px solid #f1f5f9",paddingTop:10,cursor:"pointer"}}
+                            onClick={()=>{setSelectedAccountId(a.id);setViewPersist("transactions");}}>
+                            <div style={{textAlign:"center"}}><p style={{margin:0,fontSize:10,color:"#94a3b8"}}>Ingresos</p><p style={{margin:0,fontSize:12,color:"#059669",fontWeight:600}}>{fmx(tot.ingresos)}</p></div>
+                            <div style={{textAlign:"center"}}><p style={{margin:0,fontSize:10,color:"#94a3b8"}}>Gastos</p><p style={{margin:0,fontSize:12,color:"#dc2626",fontWeight:600}}>{fmx(tot.gastos)}</p></div>
+                            <div style={{textAlign:"center"}}><p style={{margin:0,fontSize:10,color:"#94a3b8"}}>Balance mov.</p><p style={{margin:0,fontSize:12,color:tot.ingresos-tot.gastos>=0?"#059669":"#dc2626",fontWeight:600}}>{fmx(tot.ingresos-tot.gastos)}</p></div>
+                            <div style={{textAlign:"center"}}>
+                              <p style={{margin:0,fontSize:10,color:"#94a3b8"}}>Movs.</p>
+                              <p style={{margin:0,fontSize:12,color:"#4f46e5",fontWeight:600}}>{tot.txCount} →</p>
+                            </div>
+                          </div>
+                          {a.type==="deposito" && (
+                            <div style={{marginTop:8,display:"flex",flexDirection:"column",gap:6}}>
+                              {[{n:1,amt:a.dep1_amount,start:a.dep1_start,end:a.dep1_end,rate:a.dep1_rate},{n:2,amt:a.dep2_amount,start:a.dep2_start,end:a.dep2_end,rate:a.dep2_rate}]
+                                .filter(d=>d.amt||d.end).map(d=>{
+                                  const days = daysUntil(d.end);
+                                  const color = days!==null&&days<=7?"#dc2626":days!==null&&days<=30?"#d97706":"#059669";
+                                  return (
+                                    <div key={d.n} style={{background:days!==null&&days<=30?"#fffbeb":"#f0fdf4",borderRadius:8,padding:"6px 10px"}}>
+                                      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                                        <span style={{fontSize:11,fontWeight:700,color:"#059669"}}>Depósito {d.n}</span>
+                                        {d.amt&&<span style={{fontSize:12,fontWeight:700,color:"#1e293b"}}>{fmx(d.amt)}</span>}
+                                      </div>
+                                      {d.end&&<p style={{margin:"2px 0 0",fontSize:11,color,fontWeight:600}}>
+                                        {d.start&&`${d.start} → `}{d.end} {days!==null&&days<=30&&`(${days===0?"hoy":days===1?"mañana":`${days}d`})`}
+                                        {d.rate&&<span style={{marginLeft:6,color:"#64748b"}}>{d.rate}%</span>}
+                                      </p>}
+                                    </div>
+                                  );
+                              })}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              );
+            })}
+
+            {accounts.length===0 && (
+              <div style={{...S.card,textAlign:"center",padding:"48px"}}>
+                <p style={{fontSize:32,margin:0}}>⊞</p>
+                <p style={{color:"#94a3b8",marginTop:8}}>Sin cuentas. Crea tu primera cuenta.</p>
+                <button style={{...S.btnPrimary,marginTop:12}} onClick={()=>setModal("newAcc")}>Crear cuenta</button>
+              </div>
+            )}
+
+            {/* Stocks section */}
+            {accounts.some(a=>(a.type||"cuenta")==="bolsa") && (
+              <div style={{marginTop:8}}>
+                <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
+                  <div style={{display:"flex",alignItems:"center",gap:8}}>
+                    <div style={{width:10,height:10,borderRadius:"50%",background:"#d97706"}}/>
+                    <h2 style={{fontSize:15,fontWeight:700,color:"#1e293b",margin:0}}>Posiciones de bolsa</h2>
+                  </div>
+                  <button style={S.btnPrimary} onClick={(e)=>{e.stopPropagation();setStockForm({account_id:accounts.find(a=>a.type==="bolsa")?.id||"",name:"",buy_date:today(),buy_price:"",quantity:"",sell_date:"",sell_price:""});setEditStock(null);setModal("newStock");}}>+ Añadir valor</button>
+                </div>
+                {stocksWithValue.length===0 && <p style={{...S.empty,textAlign:"left"}}>Sin posiciones registradas</p>}
+                <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(260px,1fr))",gap:14}}>
+                  {stocksWithValue.map(s=>{
+                    const isSold = !!s.sell_date;
+                    const gainColor = s.gain>=0?"#059669":"#dc2626";
+                    const acc = accounts.find(a=>a.id===s.account_id);
+                    return (
+                      <div key={s.id} style={{...S.accCard,borderTop:`3px solid ${s.gain>=0?"#059669":"#dc2626"}`}}>
+                        <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:8}}>
+                          <div>
+                            <p style={{margin:0,fontWeight:700,color:"#0f172a",fontSize:15}}>{s.name}</p>
+                            <p style={{margin:0,fontSize:11,color:"#94a3b8"}}>{acc?.name} · {s.quantity} acciones</p>
+                          </div>
+                          <div style={{display:"flex",gap:4}}>
+                            <button style={S.iconBtn} onClick={()=>startEditStock(s)}>✎</button>
+                            <button style={{...S.iconBtn,...S.iconBtnDel}} onClick={()=>deleteStock(s.id)}>✕</button>
+                          </div>
+                        </div>
+                        <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:8}}>
+                          <div><p style={{margin:0,fontSize:10,color:"#94a3b8"}}>Compra</p><p style={{margin:0,fontSize:13,fontWeight:600,color:"#1e293b"}}>{fmx(s.buy_price)}</p><p style={{margin:0,fontSize:10,color:"#94a3b8"}}>{s.buy_date}</p></div>
+                          <div><p style={{margin:0,fontSize:10,color:"#94a3b8"}}>{isSold?"Venta":"Valor actual"}</p><p style={{margin:0,fontSize:13,fontWeight:600,color:"#1e293b"}}>{fmx(isSold?s.sell_price:s.buy_price)}</p>{isSold&&<p style={{margin:0,fontSize:10,color:"#94a3b8"}}>{s.sell_date}</p>}</div>
+                        </div>
+                        <div style={{borderTop:"1px solid #f1f5f9",paddingTop:8,display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                          <div><p style={{margin:0,fontSize:10,color:"#94a3b8"}}>Invertido</p><p style={{margin:0,fontSize:13,fontWeight:600,color:"#1e293b"}}>{fmx(s.invested)}</p></div>
+                          <div style={{textAlign:"right"}}>
+                            <p style={{margin:0,fontSize:10,color:"#94a3b8"}}>Resultado</p>
+                            <p style={{margin:0,fontSize:14,fontWeight:700,color:gainColor}}>{s.gain>=0?"+":""}{fmx(s.gain)} ({s.gainPct>=0?"+":""}{s.gainPct.toFixed(1)}%)</p>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
+            {/* Deposit alerts in accounts view */}
+            {depositAlerts.length > 0 && (
+              <div style={{...S.card,background:"#fffbeb",border:"1px solid #fde68a",marginTop:8}}>
+                <h2 style={{...S.cardTitle,color:"#d97706"}}>⏰ Depósitos próximos a vencer</h2>
+                {depositAlerts.map(d=>(
+                  <div key={d.id} style={{display:"flex",justifyContent:"space-between",padding:"8px 0",borderBottom:"1px solid #fef3c7"}}>
+                    <span style={{fontSize:13,color:"#92400e",fontWeight:600}}>{d.icon} {d.name} — {d.label}</span>
+                    <span style={{fontSize:13,color:"#d97706"}}>{d.end_date} · {d.daysLeft===0?"Vence hoy":d.daysLeft===1?"Vence mañana":`${d.daysLeft} días`}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* ══ TRANSACTIONS ══ */}
+        {view==="transactions" && (
+          <div style={{...S.page,padding:isMobile?"16px 14px 20px":"32px 36px",paddingTop:isMobile?"48px":"32px"}}>
+            <div style={S.pageHeader}>
+              <div>
+                <h1 style={S.pageTitle}>
+                  {selectedAccountId ? (accounts.find(a=>a.id===selectedAccountId)?.name || "Movimientos") : "Movimientos"}
+                </h1>
+                <p style={S.pageSub}>{filteredTx.length} registros</p>
+              </div>
+              <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+                {selectedAccountId && <button style={S.btnSecondary} onClick={()=>setSelectedAccountId(null)}>✕ Todas</button>}
+                <button style={S.btnSecondary} onClick={()=>setModal("export")}>⬇ Exportar</button>
+                <button style={S.btnPrimary} onClick={()=>{setViewPersist("add");setEditTx(null);}}>+ Nuevo</button>
+              </div>
+            </div>
+            <div style={{display:"flex",gap:10,marginBottom:10,flexWrap:"wrap",alignItems:"center"}}>
+              <input style={{...S.search,flex:1,minWidth:160}} placeholder="Buscar…" value={search} onChange={e=>setSearch(e.target.value)}/>
+              <div style={S.tabs}>
+                {[["all","Todos"],["ingreso","Ingresos"],["gasto","Gastos"]].map(([v,l])=>(
+                  <button key={v} style={{...S.tab,...(filter===v?S.tabActive:{})}} onClick={()=>setFilter(v)}>{l}</button>
+                ))}
+              </div>
+              {!selectedAccountId && (
+                <select style={{...S.input,width:"auto",padding:"8px 12px"}} value={filterAcc} onChange={e=>setFilterAcc(e.target.value)}>
+                  <option value="all">Todas las cuentas</option>
+                  {accounts.map(a=><option key={a.id} value={a.id}>{a.name}</option>)}
+                </select>
+              )}
+            </div>
+            <div style={{display:"flex",gap:10,marginBottom:16,flexWrap:"wrap",alignItems:"center"}}>
+              <label style={{fontSize:12,color:"#64748b",fontWeight:600}}>Desde</label>
+              <input style={{...S.search,width:"auto"}} type="date" value={dateFrom} onChange={e=>setDateFrom(e.target.value)}/>
+              <label style={{fontSize:12,color:"#64748b",fontWeight:600}}>Hasta</label>
+              <input style={{...S.search,width:"auto"}} type="date" value={dateTo} onChange={e=>setDateTo(e.target.value)}/>
+              {(dateFrom||dateTo) && <button style={{...S.btnCancel,padding:"8px 12px",fontSize:12}} onClick={()=>{setDateFrom("");setDateTo("");}}>✕ Limpiar</button>}
+            </div>
+            <div style={S.card}>
+              {txWithBalance.length===0 && <p style={S.empty}>No se encontraron movimientos</p>}
+              {txWithBalance.map(t=><TxRow key={t.id} t={t} accounts={accounts} onEdit={startEditTx} onDelete={confirmDeleteTx} showBalance={true}/>)}
+            </div>
+          </div>
+        )}
+
+        {/* ══ ADD / EDIT TX ══ */}
+        {view==="add" && (
+          <div style={{...S.page,padding:isMobile?"16px 14px 20px":"32px 36px",paddingTop:isMobile?"48px":"32px"}}>
+            <h1 style={S.pageTitle}>{editTx?"Editar movimiento":"Nuevo movimiento"}</h1>
+            <p style={S.pageSub}>{editTx?"Modifica los datos":"Registra un ingreso o gasto"}</p>
+            <div style={{...S.card,maxWidth:520}}>
+              <div style={S.typeToggle}>
+                {["ingreso","gasto"].map(tp=>(
+                  <button key={tp} style={{...S.typeBtn,...(txForm.type===tp?(tp==="ingreso"?S.typeBtnIng:S.typeBtnGas):{})}}
+                    onClick={()=>setTxForm(f=>({...f,type:tp,category:""}))}>
+                    {tp==="ingreso"?"↑ Ingreso":"↓ Gasto"}
+                  </button>
+                ))}
+              </div>
+              <label style={S.label}>Fecha</label>
+              <input style={S.input} type="date" value={txForm.date} onChange={e=>setTxForm(f=>({...f,date:e.target.value}))}/>
+              <label style={S.label}>Descripción</label>
+              <input style={S.input} placeholder="Ej. Supermercado, Salario…" value={txForm.description} onChange={e=>setTxForm(f=>({...f,description:e.target.value}))}/>
+              <label style={S.label}>Categoría</label>
+              <select style={S.input} value={txForm.category} onChange={e=>setTxForm(f=>({...f,category:e.target.value}))}>
+                <option value="">-- Selecciona --</option>
+                {CATEGORIES[txForm.type].map(c=><option key={c} value={c}>{c}</option>)}
+              </select>
+              <label style={S.label}>Cuenta</label>
+              <select style={S.input} value={txForm.account_id} onChange={e=>setTxForm(f=>({...f,account_id:e.target.value}))}>
+                <option value="">-- Selecciona --</option>
+                {accounts.map(a=><option key={a.id} value={a.id}>{a.icon} {a.name}</option>)}
+              </select>
+              <label style={S.label}>Importe (€)</label>
+              <input style={S.input} type="number" min="0" placeholder="0.00" value={txForm.amount} onChange={e=>setTxForm(f=>({...f,amount:e.target.value}))}/>
+              {!editTx && <>
+                <label style={S.label}>Recurrencia</label>
+                <select style={S.input} value={txForm.recurrence} onChange={e=>setTxForm(f=>({...f,recurrence:e.target.value}))}>
+                  {RECURRENCE_OPTIONS.map(o=><option key={o.value} value={o.value}>{o.label}</option>)}
+                </select>
+                {txForm.recurrence!=="none" && <>
+                  <label style={S.label}>Fecha de fin (opcional)</label>
+                  <input style={S.input} type="date" value={txForm.recurrence_end} onChange={e=>setTxForm(f=>({...f,recurrence_end:e.target.value}))}/>
+                  <div style={{background:"#eef2ff",color:"#4f46e5",borderRadius:8,padding:"8px 12px",fontSize:12,marginTop:10,fontWeight:500}}>
+                    ↺ Se repetirá {recLabel[txForm.recurrence]?.toLowerCase()} {txForm.recurrence_end?`hasta el ${txForm.recurrence_end}`:"indefinidamente"}
+                  </div>
+                </>}
+              </>}
+              <div style={S.formBtns}>
+                <button style={S.btnCancel} onClick={()=>{setViewPersist("transactions");setEditTx(null);}}>Cancelar</button>
+                <button style={S.btnPrimary} onClick={submitTx}>{editTx?"Guardar cambios":"Agregar"}</button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ══ RECURRENTS ══ */}
+        {view==="recurrents" && (
+          <div style={{...S.page,padding:isMobile?"16px 14px 20px":"32px 36px",paddingTop:isMobile?"48px":"32px"}}>
+            <div style={S.pageHeader}>
+              <div><h1 style={S.pageTitle}>↺ Recurrentes</h1><p style={S.pageSub}>{recurrents.length} reglas activas</p></div>
+              <button style={S.btnPrimary} onClick={()=>setViewPersist("add")}>+ Nuevo</button>
+            </div>
+            {recurrents.length===0 && (
+              <div style={{...S.card,textAlign:"center",padding:"48px"}}>
+                <p style={{fontSize:32,margin:0}}>↺</p>
+                <p style={{color:"#94a3b8",marginTop:8}}>Sin movimientos recurrentes</p>
+                <button style={{...S.btnPrimary,marginTop:12}} onClick={()=>setViewPersist("add")}>Crear movimiento</button>
+              </div>
+            )}
+            <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(260px,1fr))",gap:14}}>
+              {[...recurrents].sort((a,b)=>a.next_date.localeCompare(b.next_date)).map(r=>{
+                const isIng = r.type==="ingreso";
+                return (
+                  <div key={r.id} style={{...S.accCard,borderTop:`3px solid ${isIng?"#34d399":"#f87171"}`}}>
+                    <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:10}}>
+                      <div style={{flex:1,minWidth:0}}>
+                        <p style={{margin:0,fontWeight:700,color:"#0f172a",fontSize:14,whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"}}>{r.description}</p>
+                        <p style={{margin:0,fontSize:11,color:"#94a3b8"}}>{r.category}</p>
+                      </div>
+                      <div style={{display:"flex",gap:4,marginLeft:8}}>
+                        <button style={S.iconBtn} onClick={()=>startEditRec(r)} title="Cambiar importe">✎</button>
+                        <button style={{...S.iconBtn,...S.iconBtnDel}} onClick={()=>deleteRecurrent(r.id)}>✕</button>
+                      </div>
+                    </div>
+                    <div style={{display:"flex",gap:6,marginBottom:8}}>
+                      <span style={{display:"inline-block",padding:"3px 8px",borderRadius:6,fontSize:11,fontWeight:600,background:isIng?"#f0fdf4":"#fef2f2",color:isIng?"#059669":"#dc2626"}}>{isIng?"↑ Ingreso":"↓ Gasto"}</span>
+                      <span style={{display:"inline-block",padding:"3px 8px",borderRadius:6,fontSize:11,fontWeight:600,background:"#eef2ff",color:"#4f46e5"}}>{recLabel[r.recurrence]}</span>
+                    </div>
+                    <p style={{margin:"0 0 10px",fontSize:20,fontWeight:700,color:isIng?"#059669":"#dc2626"}}>{isIng?"+":"-"}{fmx(r.amount)}</p>
+                    <div style={{borderTop:"1px solid #f1f5f9",paddingTop:10,display:"flex",justifyContent:"space-between"}}>
+                      <div><p style={{margin:0,fontSize:10,color:"#94a3b8"}}>Próxima fecha</p><p style={{margin:0,fontSize:13,color:"#1e293b",fontWeight:600}}>{r.next_date}</p></div>
+                      {r.end_date && <div style={{textAlign:"right"}}><p style={{margin:0,fontSize:10,color:"#94a3b8"}}>Fecha fin</p><p style={{margin:0,fontSize:13,color:"#1e293b",fontWeight:600}}>{r.end_date}</p></div>}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {/* ══ BUDGETS ══ */}
+        {view==="budgets" && (
+          <div style={{...S.page,padding:isMobile?"16px 14px 20px":"32px 36px",paddingTop:isMobile?"48px":"32px"}}>
+            <div style={S.pageHeader}>
+              <div><h1 style={S.pageTitle}>Presupuestos</h1><p style={S.pageSub}>Límites mensuales</p></div>
+              <button style={S.btnPrimary} onClick={()=>{setBudgetForm({category:"",amount:""});setEditBudget(null);setModal("newBudget");}}>+ Nuevo</button>
+            </div>
+            <div style={{...S.card,marginBottom:16,background:"linear-gradient(135deg,#eef2ff,#e0e7ff)",border:"1px solid #c7d2fe"}}>
+              <h2 style={{...S.cardTitle,marginBottom:12}}>🗓 Límite mensual global</h2>
+              {monthlyLimit ? (
+                <div>
+                  <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:10}}>
+                    <div>
+                      <p style={{margin:0,fontSize:13,color:"#4f46e5"}}>Presupuesto total del mes</p>
+                      <p style={{margin:"4px 0 0",fontSize:22,fontWeight:700,color:"#4f46e5"}}>{fmx(monthlyLimit.amount)}</p>
+                    </div>
+                    <button style={{...S.iconBtn,...S.iconBtnDel}} onClick={deleteMonthlyLimit}>✕</button>
+                  </div>
+                  {(()=>{
+                    const currentMonth = new Date().toISOString().slice(0,7);
+                    const spent = transactions.filter(t=>t.type==="gasto"&&t.date.startsWith(currentMonth)).reduce((s,t)=>s+t.amount,0);
+                    const pct = Math.min((spent/monthlyLimit.amount)*100,100);
+                    const over = spent>monthlyLimit.amount;
+                    const warn = pct>=80&&!over;
+                    const barColor = over?"#ef4444":warn?"#f59e0b":"#4f46e5";
+                    return (
+                      <div>
+                        <div style={{display:"flex",justifyContent:"space-between",marginBottom:6}}>
+                          <span style={{fontSize:13,color:"#6b7280"}}>Gastado: <b style={{color:over?"#dc2626":"#1e293b"}}>{fmx(spent)}</b></span>
+                          <span style={{fontSize:13,color:"#94a3b8"}}>{pct.toFixed(0)}%</span>
+                        </div>
+                        <div style={S.progTrack}><div style={{...S.progBar,width:`${pct}%`,background:`linear-gradient(90deg,${barColor},${barColor}99)`}}/></div>
+                        <p style={{margin:"6px 0 0",fontSize:12,color:over?"#dc2626":warn?"#d97706":"#059669",fontWeight:600}}>
+                          {over?`⚠ Excedido en ${fmx(spent-monthlyLimit.amount)}`:warn?`⚡ Quedan solo ${fmx(monthlyLimit.amount-spent)}`:`✓ Disponible: ${fmx(monthlyLimit.amount-spent)}`}
+                        </p>
+                      </div>
+                    );
+                  })()}
+                </div>
+              ) : (
+                <div style={{display:"flex",gap:10,alignItems:"flex-end",flexWrap:"wrap"}}>
+                  <div style={{flex:1,minWidth:180}}>
+                    <label style={S.label}>Límite total del mes (€)</label>
+                    <input style={S.input} type="number" placeholder="Ej. 2000" value={monthlyLimitForm} onChange={e=>setMonthlyLimitForm(e.target.value)}/>
+                  </div>
+                  <button style={{...S.btnPrimary,marginBottom:1}} onClick={saveMonthlyLimit}>Guardar</button>
+                </div>
+              )}
+            </div>
+
+            <div style={{...S.card,marginBottom:16}}>
+              <div style={{display:"flex",gap:32,flexWrap:"wrap"}}>
+                {[
+                  {label:"Total presupuestado",val:fmx(budgetsWithSpent.reduce((s,b)=>s+b.amount,0)),color:"#4f46e5"},
+                  {label:"Total gastado",val:fmx(budgetsWithSpent.reduce((s,b)=>s+b.spent,0)),color:"#dc2626"},
+                  {label:"Disponible",val:fmx(budgetsWithSpent.reduce((s,b)=>s+(b.amount-b.spent),0)),color:"#059669"},
+                  {label:"Categorías",val:budgets.length,color:"#d97706"},
+                ].map(({label,val,color})=>(
+                  <div key={label}>
+                    <p style={{margin:0,fontSize:11,color:"#6b7280",textTransform:"uppercase",letterSpacing:"0.06em"}}>{label}</p>
+                    <p style={{margin:"4px 0 0",fontSize:18,fontWeight:700,color}}>{val}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {budgets.length===0 && (
+              <div style={{...S.card,textAlign:"center",padding:"48px"}}>
+                <p style={{fontSize:32,margin:0}}>◎</p>
+                <p style={{color:"#94a3b8",marginTop:8}}>Sin presupuestos por categoría</p>
+                <button style={{...S.btnPrimary,marginTop:12}} onClick={()=>setModal("newBudget")}>Crear presupuesto</button>
+              </div>
+            )}
+            <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(240px,1fr))",gap:14}}>
+              {budgetsWithSpent.map(b=>{
+                const pct = Math.min((b.spent/b.amount)*100,100);
+                const over = b.spent>b.amount;
+                const warn = pct>=80&&!over;
+                const barColor = over?"#ef4444":warn?"#f59e0b":"#4f46e5";
+                return (
+                  <div key={b.id} style={{...S.budgetCard,borderTop:`3px solid ${barColor}`}}>
+                    <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:10}}>
+                      <div>
+                        <p style={{margin:0,fontWeight:700,color:"#0f172a",fontSize:14}}>{b.category}</p>
+                        {over && <span style={S.badgeDanger}>⚠ Excedido</span>}
+                        {warn && <span style={S.badgeWarn}>⚡ Cerca</span>}
+                      </div>
+                      <div style={{display:"flex",gap:4}}>
+                        <button style={S.iconBtn} onClick={()=>startEditBudget(b)}>✎</button>
+                        <button style={{...S.iconBtn,...S.iconBtnDel}} onClick={()=>confirmDeleteBudget(b.id)}>✕</button>
+                      </div>
+                    </div>
+                    <div style={{display:"flex",justifyContent:"space-between",marginBottom:6}}>
+                      <span style={{fontSize:12,color:"#64748b"}}>Gastado: <b style={{color:over?"#dc2626":"#1e293b"}}>{fmx(b.spent)}</b></span>
+                      <span style={{fontSize:12,color:"#94a3b8"}}>Límite: {fmx(b.amount)}</span>
+                    </div>
+                    <div style={S.progTrack}><div style={{...S.progBar,width:`${pct}%`,background:`linear-gradient(90deg,${barColor},${barColor}99)`}}/></div>
+                    <div style={{display:"flex",justifyContent:"space-between",marginTop:6}}>
+                      <span style={{fontSize:11,color:"#94a3b8"}}>{pct.toFixed(0)}% usado</span>
+                      <span style={{fontSize:11,color:over?"#dc2626":"#059669"}}>{over?`-${fmx(b.spent-b.amount)} excedido`:`${fmx(b.amount-b.spent)} libre`}</span>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
+      </main>
+    </div>
+  );
+}
+
+// ─── TX ROW ───────────────────────────────────────────────────────────────────
+function TxRow({ t, accounts, onEdit, onDelete, showBalance }) {
+  const isIng = t.type==="ingreso";
+  const acc = accounts.find(a=>a.id===t.account_id);
+  const isRec = t.recurrence && t.recurrence!=="none";
+  return (
+    <div style={styles.txRow}>
+      <div style={{...styles.txDot,background:isIng?"#34d399":"#f87171"}}/>
+      <div style={styles.txInfo}>
+        <span style={styles.txDesc}>{t.description}{isRec && <span style={{fontSize:10,color:"#4f46e5",marginLeft:6,fontWeight:600}}>↺</span>}</span>
+        <span style={styles.txMeta}>{t.category} · {t.date}{acc?` · ${acc.icon} ${acc.name}`:""}</span>
+      </div>
+      <div style={{textAlign:"right",flexShrink:0}}>
+        <span style={{...styles.txAmount,color:isIng?"#059669":"#dc2626",display:"block"}}>{isIng?"+":"-"}{new Intl.NumberFormat("es-ES",{style:"currency",currency:"EUR"}).format(t.amount)}</span>
+        {showBalance && t.runningBalance!==undefined && (
+          <span style={{fontSize:10,color:"#94a3b8"}}>Saldo: {new Intl.NumberFormat("es-ES",{style:"currency",currency:"EUR"}).format(t.runningBalance)}</span>
+        )}
+      </div>
+      <div style={styles.txActions}>
+        <button style={styles.iconBtn} onClick={()=>onEdit(t)}>✎</button>
+        <button style={{...styles.iconBtn,...styles.iconBtnDel}} onClick={()=>onDelete(t.id)}>✕</button>
+      </div>
+    </div>
+  );
+}
+
+// ─── STYLES ───────────────────────────────────────────────────────────────────
+const styles = {
+  root:{display:"flex",minHeight:"100vh",background:"#f8fafc",color:"#1e293b",fontFamily:"'DM Sans','Segoe UI',sans-serif"},
+  sidebar:{width:222,background:"#ffffff",display:"flex",flexDirection:"column",padding:"24px 14px",position:"fixed",top:0,left:0,height:"100vh",flexShrink:0,borderRight:"1px solid #e2e8f0",boxShadow:"2px 0 8px rgba(0,0,0,.06)",zIndex:100,overflowY:"auto"},
+  logo:{display:"flex",alignItems:"center",gap:10,marginBottom:32},
+  logoIcon:{fontSize:22,color:"#4f46e5"},
+  logoText:{fontSize:14,fontWeight:700,letterSpacing:"0.03em",color:"#1e293b"},
+  nav:{display:"flex",flexDirection:"column",gap:3},
+  navBtn:{display:"flex",alignItems:"center",gap:10,padding:"10px 12px",borderRadius:10,background:"transparent",border:"none",color:"#64748b",cursor:"pointer",fontSize:13,fontWeight:500,textAlign:"left",transition:"all .15s"},
+  navBtnActive:{background:"#eef2ff",color:"#4f46e5"},
+  navIcon:{fontSize:15,width:18,textAlign:"center"},
+  exportSideBtn:{marginTop:12,background:"#f8fafc",border:"1px solid #e2e8f0",color:"#64748b",borderRadius:10,padding:"9px 14px",cursor:"pointer",fontSize:13,fontWeight:500},
+  sidebalBox:{marginTop:"auto",background:"#f8fafc",borderRadius:12,padding:"14px",border:"1px solid #e2e8f0"},
+  sidebalLabel:{fontSize:10,color:"#94a3b8",textTransform:"uppercase",letterSpacing:"0.08em",margin:0},
+  sidebalAmt:{fontSize:19,fontWeight:700,margin:"4px 0 0"},
+  main:{flex:1,overflowY:"auto",background:"#f8fafc",minWidth:0,width:"100%"},
+  page:{padding:"32px 36px",maxWidth:1000,margin:"0 auto",boxSizing:"border-box",width:"100%"},
+  pageTitle:{fontSize:24,fontWeight:700,margin:0,color:"#0f172a"},
+  pageSub:{color:"#94a3b8",marginTop:4,marginBottom:24,fontSize:13},
+  pageHeader:{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:20,flexWrap:"wrap",gap:10},
+  kpiRow:{display:"grid",gap:12,marginBottom:20},
+  kpi:{borderRadius:14,padding:"14px 16px",display:"flex",alignItems:"center",gap:10},
+  kpiLabel:{fontSize:10,color:"#64748b",textTransform:"uppercase",letterSpacing:"0.06em",margin:0},
+  kpiValue:{fontSize:18,fontWeight:700,margin:"4px 0 0"},
+  twoCol:{display:"grid",gap:16,marginBottom:16},
+  card:{background:"#ffffff",borderRadius:16,padding:"20px 22px",marginBottom:16,border:"1px solid #e2e8f0",boxShadow:"0 1px 4px rgba(0,0,0,.04)"},
+  accCard:{background:"#ffffff",borderRadius:14,padding:"16px 18px",border:"1px solid #e2e8f0",boxShadow:"0 1px 4px rgba(0,0,0,.04)"},
+  budgetCard:{background:"#ffffff",borderRadius:14,padding:"16px 18px",border:"1px solid #e2e8f0",boxShadow:"0 1px 4px rgba(0,0,0,.04)"},
+  cardTitle:{fontSize:14,fontWeight:600,color:"#475569",marginTop:0,marginBottom:14},
+  cardHeader:{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10},
+  linkBtn:{background:"none",border:"none",color:"#4f46e5",cursor:"pointer",fontSize:12},
+  barChart:{display:"flex",alignItems:"flex-end",gap:3,height:90,marginBottom:8},
+  barGroup:{flex:1,display:"flex",flexDirection:"column",alignItems:"center",gap:2,height:"100%"},
+  bars:{flex:1,display:"flex",alignItems:"flex-end",gap:2,width:"100%"},
+  bar:{flex:1,borderRadius:"3px 3px 0 0",minHeight:2,transition:"height .4s"},
+  barLabel:{fontSize:8,color:"#94a3b8"},
+  legend:{display:"flex",alignItems:"center",marginTop:4},
+  dot:{width:8,height:8,borderRadius:"50%",display:"inline-block"},
+  legLabel:{fontSize:11,color:"#94a3b8",marginLeft:4},
+  catRow:{marginBottom:10},
+  catInfo:{display:"flex",justifyContent:"space-between",marginBottom:4},
+  catName:{fontSize:13,color:"#334155"},
+  catVal:{fontSize:13,color:"#64748b"},
+  progTrack:{height:5,background:"#f1f5f9",borderRadius:3},
+  progBar:{height:"100%",background:"linear-gradient(90deg,#4f46e5,#818cf8)",borderRadius:3,transition:"width .4s"},
+  txRow:{display:"flex",alignItems:"center",gap:12,padding:"11px 0",borderBottom:"1px solid #f1f5f9"},
+  txDot:{width:9,height:9,borderRadius:"50%",flexShrink:0},
+  txInfo:{flex:1,minWidth:0},
+  txDesc:{display:"block",fontSize:13,color:"#1e293b",whiteSpace:"nowrap",overflow:"hidden",textOverflow:"ellipsis"},
+  txMeta:{fontSize:11,color:"#94a3b8"},
+  txAmount:{fontSize:14,fontWeight:600},
+  txActions:{display:"flex",gap:4},
+  iconBtn:{background:"#f8fafc",border:"1px solid #e2e8f0",color:"#64748b",width:27,height:27,borderRadius:7,cursor:"pointer",fontSize:12,display:"flex",alignItems:"center",justifyContent:"center"},
+  iconBtnDel:{color:"#dc2626",borderColor:"#fecaca"},
+  search:{background:"#f8fafc",border:"1px solid #e2e8f0",color:"#1e293b",borderRadius:10,padding:"8px 14px",fontSize:13,outline:"none"},
+  tabs:{display:"flex",background:"#f8fafc",borderRadius:10,border:"1px solid #e2e8f0",overflow:"hidden"},
+  tab:{background:"none",border:"none",color:"#64748b",padding:"8px 12px",cursor:"pointer",fontSize:12},
+  tabActive:{background:"#eef2ff",color:"#4f46e5",fontWeight:600},
+  empty:{color:"#94a3b8",textAlign:"center",padding:"24px 0",fontSize:13},
+  typeToggle:{display:"flex",gap:8,marginBottom:18},
+  typeBtn:{flex:1,padding:"10px",borderRadius:10,border:"2px solid #e2e8f0",background:"#f8fafc",color:"#64748b",fontWeight:600,cursor:"pointer",fontSize:13,transition:"all .15s"},
+  typeBtnIng:{borderColor:"#34d399",color:"#059669",background:"#f0fdf4"},
+  typeBtnGas:{borderColor:"#f87171",color:"#dc2626",background:"#fef2f2"},
+  label:{display:"block",fontSize:11,color:"#64748b",textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:5,marginTop:14},
+  input:{width:"100%",background:"#f8fafc",border:"1px solid #e2e8f0",color:"#1e293b",borderRadius:10,padding:"10px 13px",fontSize:13,outline:"none",boxSizing:"border-box"},
+  formBtns:{display:"flex",gap:10,marginTop:22},
+  btnPrimary:{background:"#4f46e5",color:"#fff",border:"none",borderRadius:10,padding:"10px 20px",fontWeight:600,cursor:"pointer",fontSize:13},
+  btnSecondary:{background:"#f8fafc",color:"#64748b",border:"1px solid #e2e8f0",borderRadius:10,padding:"9px 18px",cursor:"pointer",fontSize:13,fontWeight:500},
+  btnCancel:{background:"#f1f5f9",color:"#64748b",border:"none",borderRadius:10,padding:"10px 18px",cursor:"pointer",fontSize:13},
+  btnDanger:{background:"#ef4444",color:"#fff",border:"none",borderRadius:10,padding:"10px 18px",fontWeight:600,cursor:"pointer",fontSize:13},
+  overlay:{position:"fixed",inset:0,background:"rgba(15,23,42,.4)",display:"flex",alignItems:"center",justifyContent:"center",zIndex:99},
+  modal:{background:"#ffffff",border:"1px solid #e2e8f0",borderRadius:18,padding:"26px 28px",minWidth:300,maxWidth:420,width:"90%",maxHeight:"88vh",overflowY:"auto",boxShadow:"0 20px 60px rgba(0,0,0,.12)"},
+  modalTitle:{fontSize:16,fontWeight:700,margin:"0 0 6px",color:"#0f172a"},
+  modalSub:{fontSize:13,color:"#94a3b8",margin:"0 0 18px"},
+  modalBtns:{display:"flex",gap:8,justifyContent:"flex-end",marginTop:20},
+  exportBtn:{display:"flex",alignItems:"center",gap:14,padding:"14px 16px",background:"#f8fafc",border:"1px solid #e2e8f0",borderRadius:12,cursor:"pointer",color:"#1e293b",textAlign:"left",width:"100%",fontSize:14,fontWeight:600},
+  toast:{position:"fixed",top:18,right:18,color:"#fff",padding:"11px 20px",borderRadius:12,fontWeight:600,fontSize:13,zIndex:999,boxShadow:"0 8px 24px rgba(0,0,0,.15)"},
+  badgeDanger:{display:"inline-block",background:"#fef2f2",color:"#dc2626",fontSize:10,padding:"2px 7px",borderRadius:5,fontWeight:600,marginTop:2},
+  badgeWarn:{display:"inline-block",background:"#fffbeb",color:"#d97706",fontSize:10,padding:"2px 7px",borderRadius:5,fontWeight:600,marginTop:2},
+  miniCard:{display:"flex",alignItems:"center",gap:10,padding:"10px 14px",borderRadius:12,border:"1px solid",flex:1,minWidth:160},
+};

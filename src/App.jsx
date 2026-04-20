@@ -3,7 +3,7 @@ import { createClient } from "@supabase/supabase-js";
 
 const SUPABASE_URL = "https://adnyrevdvdndffesaszc.supabase.co";
 const SUPABASE_KEY = "sb_publishable_GsfPHYgw6xMjM3LISfz4Gg_KuEvwP_x";
-const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
+const supabase = createClient(SUPABASE_URL, SUPABASE_KEY, { auth: { persistSession: true, autoRefreshToken: false } });
 
 function useWindowSize() {
   const [size, setSize] = useState({ w: window.innerWidth });
@@ -234,7 +234,11 @@ export default function App() {
   const [loginForm, setLoginForm] = useState({ email:"", password:"", name:"" });
   const [loginError, setLoginError] = useState("");
   const [loginLoading, setLoginLoading] = useState(false);
-  const [loginMode, setLoginMode] = useState("login"); // login | register | confirm
+  const [loginMode, setLoginMode] = useState("login");
+  const [biometricLocked, setBiometricLocked] = useState(false);
+  const [biometricError, setBiometricError] = useState("");
+  const isTWA = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
+ // login | register | confirm
   const [transactions, setTransactions] = useState([]);
   const [accounts, setAccounts] = useState([]);
   const [budgets, setBudgets] = useState([]);
@@ -291,12 +295,68 @@ export default function App() {
     Notification.requestPermission().then(p=>{ if(p==="granted") showToast("Notificaciones activadas ✓","#059669"); else showToast("Permiso denegado","#ef4444"); });
   };
 
+  const unlockWithBiometric = async () => {
+    setBiometricError("");
+    try {
+      const challenge = new Uint8Array(32);
+      crypto.getRandomValues(challenge);
+      const userId = new Uint8Array(16);
+      crypto.getRandomValues(userId);
+      const credential = await navigator.credentials.create({
+        publicKey: {
+          challenge,
+          rp: { name: "Contabilidad Xhus", id: window.location.hostname },
+          user: { id: userId, name: "usuario", displayName: "Usuario Xhus" },
+          pubKeyCredParams: [{ type: "public-key", alg: -7 }],
+          authenticatorSelection: {
+            authenticatorAttachment: "platform",
+            userVerification: "required",
+            residentKey: "preferred",
+          },
+          timeout: 60000,
+        }
+      });
+      if(credential) {
+        setBiometricLocked(false);
+        // Restore session
+        supabase.auth.getSession().then(({data:{session}})=>{
+          if(session?.user) { setUser(session.user); loadAll(); }
+          else { localStorage.removeItem('xhus_has_session'); }
+        });
+      }
+    } catch(e) {
+      if(e.name === "NotAllowedError") {
+        setBiometricError("Verificación cancelada. Inténtalo de nuevo.");
+      } else {
+        setBiometricLocked(false);
+        loadAll();
+      }
+    }
+  };
+
   const handleLogin = async () => {
     setLoginError(""); setLoginLoading(true);
     const { error } = await supabase.auth.signInWithPassword({ email:loginForm.email, password:loginForm.password });
-    if(error) setLoginError("Email o contraseña incorrectos");
+    if(error) { setLoginError("Email o contraseña incorrectos"); }
+    else {
+      setLoginForm({email:"",password:"",name:""});
+      // Save flag for biometric on next open
+      const isStandalone = window.matchMedia('(display-mode: standalone)').matches;
+      if(isStandalone) localStorage.setItem('xhus_has_session','1');
+    }
     setLoginLoading(false);
   };
+  const handleResetPassword = async () => {
+    setLoginError(""); setLoginLoading(true);
+    if(!loginForm.email) { setLoginError("Introduce tu email"); setLoginLoading(false); return; }
+    const { error } = await supabase.auth.resetPasswordForEmail(loginForm.email, {
+      redirectTo: window.location.origin,
+    });
+    if(error) { setLoginError(error.message); }
+    else { setLoginMode("resetSent"); }
+    setLoginLoading(false);
+  };
+
   const handleRegister = async () => {
     setLoginError(""); setLoginLoading(true);
     if(!loginForm.name) { setLoginError("Introduce tu nombre"); setLoginLoading(false); return; }
@@ -313,12 +373,21 @@ export default function App() {
 
   const handleLogout = async () => {
     await supabase.auth.signOut();
+    // Keep xhus_has_session so biometric shows on next open
     setUser(null); setTransactions([]); setAccounts([]); setBudgets([]); setRecurrents([]); setMonthlyLimit(null); setStocks([]); setDebts([]); setProperties([]);
     sessionStorage.removeItem("xhus_view");
   };
 
   useEffect(() => {
-    supabase.auth.getSession().then(({ data: { session } }) => { setUser(session?.user??null); setAuthLoading(false); if(session?.user) loadAll(); });
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setUser(session?.user??null);
+      setAuthLoading(false);
+      if(session?.user) {
+        const isStandalone = window.matchMedia('(display-mode: standalone)').matches;
+        if(isStandalone) setBiometricLocked(true);
+        else loadAll();
+      }
+    });
     supabase.auth.onAuthStateChange((_e,session) => { setUser(session?.user??null); if(session?.user) loadAll(); });
   }, []);
 
@@ -545,7 +614,25 @@ export default function App() {
   };
 
   // ── Recurrent CRUD ────────────────────────────────────────────────────────
-  const deleteRecurrent = async id=>{await supabase.from("recurrents").delete().eq("id",id); await loadRecurrents(); showToast("Recurrente eliminado","#f59e0b");};
+  const deleteRecurrent = async id=>{
+    // Find and delete future transactions for this recurrent
+    const rec = recurrents.find(r=>r.id===id);
+    if(rec) {
+      const todayStr = today();
+      const futureTxs = transactions.filter(t=>
+        t.description===rec.description &&
+        t.account_id===rec.account_id &&
+        t.date>todayStr
+      );
+      if(futureTxs.length>0) {
+        const futureIds = futureTxs.map(t=>t.id);
+        await supabase.from("transactions").delete().in("id",futureIds);
+      }
+    }
+    await supabase.from("recurrents").delete().eq("id",id);
+    await loadRecurrents(); await loadTransactions();
+    showToast("Recurrente eliminado","#f59e0b");
+  };
   const startEditRec = r=>{setRecForm({amount:String(r.amount),type:r.type||"gasto",category:r.category||"",account_id:r.account_id||"",next_date:r.next_date||""}); setEditRec(r.id); setModal("editRec");};
   const saveRecAmount = async()=>{
     const amt=parseFloat(recForm.amount);
@@ -556,13 +643,30 @@ export default function App() {
     if(recForm.account_id) payload.account_id=recForm.account_id;
     if(recForm.next_date) payload.next_date=recForm.next_date;
     await supabase.from("recurrents").update(payload).eq("id",editRec);
-    // Update future generated transactions if date changed
-    if(recForm.next_date) {
-      const rec = recurrents.find(r=>r.id===editRec);
-      if(rec) {
-        const todayStr = today();
-        const futureIds = transactions.filter(t=>t.description===rec.description&&t.account_id===rec.account_id&&t.date>todayStr).map(t=>t.id);
-        if(futureIds.length>0) await supabase.from("transactions").delete().in("id",futureIds);
+    // Update future generated transactions with new data
+    const rec = recurrents.find(r=>r.id===editRec);
+    if(rec) {
+      const todayStr = today();
+      const futureTxs = transactions.filter(t=>
+        t.description===rec.description &&
+        t.account_id===rec.account_id &&
+        t.date>todayStr
+      );
+      if(futureTxs.length>0) {
+        const updatePayload = {};
+        if(recForm.amount) updatePayload.amount = amt;
+        if(recForm.type) updatePayload.type = recForm.type;
+        if(recForm.category) updatePayload.category = recForm.category;
+        if(recForm.account_id) updatePayload.account_id = recForm.account_id;
+        // If date changed, delete old future and let autoGenerate recreate them
+        if(recForm.next_date && recForm.next_date !== rec.next_date) {
+          const futureIds = futureTxs.map(t=>t.id);
+          await supabase.from("transactions").delete().in("id",futureIds);
+        } else if(Object.keys(updatePayload).length>0) {
+          for(const tx of futureTxs) {
+            await supabase.from("transactions").update(updatePayload).eq("id",tx.id);
+          }
+        }
       }
     }
     await loadRecurrents(); await loadTransactions();
@@ -710,7 +814,7 @@ export default function App() {
           </div>
         )}
 
-        {loginMode!=="confirm" && <>
+        {(loginMode==="login"||loginMode==="register") && <>
           {loginMode==="register" && <>
             <label style={{display:"block",fontSize:12,color:"#64748b",textTransform:"uppercase",letterSpacing:"0.06em",marginBottom:5}}>Nombre</label>
             <input style={{width:"100%",background:"#f8fafc",border:"1px solid #e2e8f0",color:"#1e293b",borderRadius:10,padding:"11px 13px",fontSize:15,outline:"none",boxSizing:"border-box",marginBottom:14}} type="text" placeholder="Tu nombre" value={loginForm.name} onChange={e=>setLoginForm(f=>({...f,name:e.target.value}))}/>
@@ -724,13 +828,40 @@ export default function App() {
             {loginLoading?(loginMode==="login"?"Entrando…":"Registrando…"):(loginMode==="login"?"Entrar":"Crear cuenta")}
           </button>
           <div style={{textAlign:"center",marginTop:16}}>
-            {loginMode==="login"
-              ? <p style={{fontSize:14,color:"#64748b",margin:0}}>¿No tienes cuenta? <button style={{background:"none",border:"none",color:"#4f46e5",cursor:"pointer",fontSize:14,fontWeight:600,padding:0}} onClick={()=>{setLoginMode("register");setLoginError("");}}>Regístrate</button></p>
-              : <p style={{fontSize:14,color:"#64748b",margin:0}}>¿Ya tienes cuenta? <button style={{background:"none",border:"none",color:"#4f46e5",cursor:"pointer",fontSize:14,fontWeight:600,padding:0}} onClick={()=>{setLoginMode("login");setLoginError("");}}>Inicia sesión</button></p>
+            {loginMode==="login" && <>
+              <p style={{fontSize:13,color:"#64748b",margin:"0 0 8px"}}>¿No tienes cuenta? <button style={{background:"none",border:"none",color:"#4f46e5",cursor:"pointer",fontSize:13,fontWeight:600,padding:0}} onClick={()=>{setLoginMode("register");setLoginError("");}}>Regístrate</button></p>
+              <p style={{fontSize:13,color:"#64748b",margin:0}}>¿Olvidaste la contraseña? <button style={{background:"none",border:"none",color:"#4f46e5",cursor:"pointer",fontSize:13,fontWeight:600,padding:0}} onClick={()=>{setLoginMode("reset");setLoginError("");}}>Recuperar</button></p>
+            </>
             }
+            {loginMode==="register" && (
+              <p style={{fontSize:13,color:"#64748b",margin:0}}>¿Ya tienes cuenta? <button style={{background:"none",border:"none",color:"#4f46e5",cursor:"pointer",fontSize:13,fontWeight:600,padding:0}} onClick={()=>{setLoginMode("login");setLoginError("");}}>Inicia sesión</button></p>
+            )}
           </div>
         </>}
         <p style={{textAlign:"center",fontSize:12,color:"#94a3b8",marginTop:20}}>🔒 Tus datos están cifrados y son privados</p>
+      </div>
+    </div>
+  );
+
+  if(biometricLocked) return (
+    <div style={{display:"flex",minHeight:"100vh",background:"linear-gradient(135deg,#eef2ff,#e0e7ff)",alignItems:"center",justifyContent:"center",fontFamily:"'DM Sans','Segoe UI',sans-serif"}}>
+      <div style={{background:"#fff",borderRadius:24,padding:"48px 32px",width:"100%",maxWidth:320,boxShadow:"0 8px 40px rgba(79,70,229,.15)",border:"1px solid #e2e8f0",textAlign:"center"}}>
+        <div style={{fontSize:56,marginBottom:16}}>🔐</div>
+        <h1 style={{margin:"0 0 8px",fontSize:22,fontWeight:700,color:"#0f172a"}}>Contabilidad Xhus</h1>
+        <p style={{margin:"0 0 28px",fontSize:14,color:"#64748b"}}>Usa tu huella digital para acceder</p>
+        {biometricError && <p style={{color:"#dc2626",fontSize:13,margin:"0 0 16px",fontWeight:500,background:"#fef2f2",padding:"8px 12px",borderRadius:8}}>⚠ {biometricError}</p>}
+        <button style={{width:"100%",background:"#4f46e5",color:"#fff",border:"none",borderRadius:14,padding:"16px",fontWeight:700,cursor:"pointer",fontSize:16,marginBottom:12,boxShadow:"0 4px 12px rgba(79,70,229,.3)"}} onClick={unlockWithBiometric}>
+          👆 Verificar huella
+        </button>
+        <button style={{width:"100%",background:"#f8fafc",color:"#64748b",border:"1px solid #e2e8f0",borderRadius:14,padding:"12px",fontWeight:600,cursor:"pointer",fontSize:14,marginBottom:12}} onClick={()=>{
+          setBiometricLocked(false);
+          supabase.auth.getSession().then(({data:{session}})=>{
+            if(session?.user){setUser(session.user);loadAll();}
+          });
+        }}>
+          Entrar con contraseña
+        </button>
+        <p style={{fontSize:11,color:"#94a3b8",margin:0}}>🔒 Tus datos están protegidos</p>
       </div>
     </div>
   );
