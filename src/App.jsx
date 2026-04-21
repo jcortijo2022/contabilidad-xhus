@@ -1789,8 +1789,8 @@ export default function App() {
                 if(d.interest_rate&&d.interest_rate>0){
                   const tae=d.interest_rate/100;
                   const mRate=Math.pow(1+tae,1/12)-1;
-                  const remMonths=Math.max(0,totalMonths-elapsedMonths);
-                  remaining=remMonths>0?myMonthly*((1-Math.pow(1+mRate,-remMonths))/mRate):0;
+                  const factor=Math.pow(1+mRate,elapsedMonths);
+                  remaining=Math.max(0,myAmt*factor-myMonthly*(factor-1)/mRate);
                 } else {
                   remaining=Math.max(0,myAmt-myMonthly*elapsedMonths);
                 }
