@@ -10,9 +10,7 @@ on:
 jobs:
   ping:
     runs-on: ubuntu-latest
-    keepalive:
-       runs-on: ubuntu-latest
-       permissions:
+    permissions:
          contents: write        # necesario para el paso keepalive
          actions: write
     steps:
